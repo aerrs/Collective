@@ -1,0 +1,14 @@
+.gradle
+build
+.idea/
+.project
+.settings/
+.classpath
+nbactions.xml
+nb-configuration.xml
+nbproject/
+# Local dev notes, not for distribution
+AGENTS.md
+CLAUDE.md
+.aider*
+.cursor*
