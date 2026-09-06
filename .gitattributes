@@ -1,0 +1,21 @@
+# Normalize line endings on checkin; check out platform-appropriate scripts.
+* text=auto
+
+# Unix shell scripts must stay LF even on Windows checkouts.
+gradlew text eol=lf
+*.sh text eol=lf
+
+# Windows batch scripts must stay CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Java/config sources: normalized text.
+*.java text
+*.gradle text
+*.properties text
+*.md text
+
+# Binary — never touch.
+*.jar binary
+*.png binary
+*.zip binary

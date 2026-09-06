@@ -51,7 +51,16 @@ public final class PanelConstants
 	public static final String TITLE_TEXT = "Collective";
 
 	public static final String SECTION_FEEDS = "Feed health";
+	public static final String SECTION_EVENTS = "Events";
 	public static final String SECTION_SETUP = "Setup";
+
+	public static final String EVENT_START = "Start event";
+	public static final String EVENT_STOP = "Stop";
+	public static final String EVENT_COPY = "Copy";
+	public static final String EVENT_RESET = "Reset";
+	public static final String EVENT_IDLE_HINT =
+		"Records clanmates who appear near you while an event runs. Copies the name list to your clipboard.";
+	public static final String EVENT_NO_NAMES = "No clanmates recorded yet.";
 
 	public static final String SETUP_PLACEHOLDER =
 		"Paste your clan's Discord webhook URLs in the plugin settings to start posting. "

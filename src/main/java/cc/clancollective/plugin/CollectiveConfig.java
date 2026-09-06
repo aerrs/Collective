@@ -165,12 +165,13 @@ public interface CollectiveConfig extends Config
 		keyName = "dropsScreenshot",
 		name = "Include screenshot",
 		description = "Attach a screenshot to drop posts. Chat privacy from the Screenshots section applies.",
+		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
 		section = SECTION_DROPS,
 		position = 3
 	)
 	default boolean dropsScreenshot()
 	{
-		return true;
+		return false;
 	}
 
 	@ConfigItem(
@@ -188,25 +189,27 @@ public interface CollectiveConfig extends Config
 	@ConfigItem(
 		keyName = "relayMessages",
 		name = "Messages",
-		description = "Relay ordinary clan chat messages.",
+		description = "Relay ordinary clan chat messages, including the sender's RuneScape name, to the configured Discord webhook.",
+		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
 		section = SECTION_CHAT,
 		position = 2
 	)
 	default boolean relayMessages()
 	{
-		return true;
+		return false;
 	}
 
 	@ConfigItem(
 		keyName = "relayBroadcasts",
 		name = "Broadcasts",
-		description = "Relay clan broadcasts such as drops, level-ups, and completions.",
+		description = "Relay clan broadcasts (drops, level-ups, completions), including player names, to the configured Discord webhook.",
+		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
 		section = SECTION_CHAT,
 		position = 3
 	)
 	default boolean relayBroadcasts()
 	{
-		return true;
+		return false;
 	}
 
 	@ConfigItem(
@@ -224,61 +227,66 @@ public interface CollectiveConfig extends Config
 	@ConfigItem(
 		keyName = "relayApplications",
 		name = "Applications",
-		description = "Relay members applying to join the clan.",
+		description = "Relay members applying to join the clan, including their RuneScape name, to the configured Discord webhook.",
+		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
 		section = SECTION_CLAN_ADMIN,
 		position = 1
 	)
 	default boolean relayApplications()
 	{
-		return true;
+		return false;
 	}
 
 	@ConfigItem(
 		keyName = "relayInvites",
 		name = "Invites",
-		description = "Relay members being invited into the clan.",
+		description = "Relay members being invited into the clan, including their RuneScape name, to the configured Discord webhook.",
+		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
 		section = SECTION_CLAN_ADMIN,
 		position = 2
 	)
 	default boolean relayInvites()
 	{
-		return true;
+		return false;
 	}
 
 	@ConfigItem(
 		keyName = "relayJoins",
 		name = "Joins",
-		description = "Relay members joining the clan.",
+		description = "Relay members joining the clan, including their RuneScape name, to the configured Discord webhook.",
+		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
 		section = SECTION_CLAN_ADMIN,
 		position = 3
 	)
 	default boolean relayJoins()
 	{
-		return true;
+		return false;
 	}
 
 	@ConfigItem(
 		keyName = "relayLeaves",
 		name = "Leaves",
-		description = "Relay members leaving the clan.",
+		description = "Relay members leaving the clan, including their RuneScape name, to the configured Discord webhook.",
+		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
 		section = SECTION_CLAN_ADMIN,
 		position = 4
 	)
 	default boolean relayLeaves()
 	{
-		return true;
+		return false;
 	}
 
 	@ConfigItem(
 		keyName = "relayRankChanges",
 		name = "Rank changes",
-		description = "Relay members being promoted or demoted.",
+		description = "Relay members being promoted or demoted, including their RuneScape name, to the configured Discord webhook.",
+		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
 		section = SECTION_CLAN_ADMIN,
 		position = 5
 	)
 	default boolean relayRankChanges()
 	{
-		return true;
+		return false;
 	}
 
 	@ConfigItem(
@@ -297,24 +305,26 @@ public interface CollectiveConfig extends Config
 		keyName = "milestonesScreenshot",
 		name = "Include screenshot",
 		description = "Attach a screenshot to milestone posts. Chat privacy from the Screenshots section applies.",
+		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
 		section = SECTION_MILESTONES,
 		position = 1
 	)
 	default boolean milestonesScreenshot()
 	{
-		return true;
+		return false;
 	}
 
 	@ConfigItem(
 		keyName = "notifyCombatTasks",
 		name = "Combat tasks",
 		description = "Post when you complete a combat achievement task.",
+		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
 		section = SECTION_MILESTONES,
 		position = 2
 	)
 	default boolean notifyCombatTasks()
 	{
-		return true;
+		return false;
 	}
 
 	@ConfigItem(
@@ -333,36 +343,39 @@ public interface CollectiveConfig extends Config
 		keyName = "notifyPersonalBests",
 		name = "Personal bests",
 		description = "Post when you achieve a new personal best time.",
+		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
 		section = SECTION_MILESTONES,
 		position = 4
 	)
 	default boolean notifyPersonalBests()
 	{
-		return true;
+		return false;
 	}
 
 	@ConfigItem(
 		keyName = "notifyPets",
 		name = "Pets",
 		description = "Post when you receive a pet.",
+		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
 		section = SECTION_MILESTONES,
 		position = 5
 	)
 	default boolean notifyPets()
 	{
-		return true;
+		return false;
 	}
 
 	@ConfigItem(
 		keyName = "notifyLevels",
 		name = "Level-ups",
 		description = "Post when you level up a skill.",
+		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
 		section = SECTION_MILESTONES,
 		position = 6
 	)
 	default boolean notifyLevels()
 	{
-		return true;
+		return false;
 	}
 
 	@ConfigItem(
@@ -407,24 +420,26 @@ public interface CollectiveConfig extends Config
 		keyName = "notifyQuests",
 		name = "Quests",
 		description = "Post when you complete a quest.",
+		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
 		section = SECTION_MILESTONES,
 		position = 10
 	)
 	default boolean notifyQuests()
 	{
-		return true;
+		return false;
 	}
 
 	@ConfigItem(
 		keyName = "notifyClues",
 		name = "Clues",
 		description = "Post when you complete a clue scroll.",
+		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
 		section = SECTION_MILESTONES,
 		position = 11
 	)
 	default boolean notifyClues()
 	{
-		return true;
+		return false;
 	}
 
 	@ConfigItem(
@@ -468,24 +483,26 @@ public interface CollectiveConfig extends Config
 		keyName = "combatScreenshot",
 		name = "Include screenshot",
 		description = "Attach a screenshot to combat posts. Chat privacy from the Screenshots section applies.",
+		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
 		section = SECTION_COMBAT,
 		position = 1
 	)
 	default boolean combatScreenshot()
 	{
-		return true;
+		return false;
 	}
 
 	@ConfigItem(
 		keyName = "notifyDeaths",
 		name = "Deaths",
 		description = "Post when you die, with the value of items lost.",
+		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
 		section = SECTION_COMBAT,
 		position = 2
 	)
 	default boolean notifyDeaths()
 	{
-		return true;
+		return false;
 	}
 
 	@Range(min = 0)
@@ -504,12 +521,13 @@ public interface CollectiveConfig extends Config
 	@ConfigItem(
 		keyName = "notifyPvp",
 		name = "PvP kills, deaths & loot keys",
-		description = "Relay clan PvP broadcasts: kills, deaths and loot keys.",
+		description = "Relay clan PvP broadcasts (kills, deaths, loot keys), including the names in the broadcast, to the configured Discord webhook.",
+		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
 		section = SECTION_COMBAT,
 		position = 4
 	)
 	default boolean notifyPvp()
 	{
-		return true;
+		return false;
 	}
 }
