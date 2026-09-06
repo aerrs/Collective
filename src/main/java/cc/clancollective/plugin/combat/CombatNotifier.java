@@ -131,7 +131,7 @@ public class CombatNotifier
 			.author(author, EmbedStyle.deathIcon())
 			.description(WebhookPayload.bold(author) + " has died.")
 			.color(EmbedStyle.DEATH)
-			.field("Value lost", QuantityFormatter.quantityToStackSize(lost) + " gp", true);
+			.field("Estimated value lost", QuantityFormatter.quantityToStackSize(lost) + " gp", true);
 
 		if (killerName != null)
 		{

@@ -3,6 +3,7 @@ package cc.clancollective.plugin;
 import cc.clancollective.plugin.chat.ChatRelayNotifier;
 import cc.clancollective.plugin.clan.ClanRankTracker;
 import cc.clancollective.plugin.combat.CombatNotifier;
+import cc.clancollective.plugin.events.EventRecorder;
 import cc.clancollective.plugin.milestones.MilestoneNotifier;
 import cc.clancollective.plugin.net.WebhookClient;
 import cc.clancollective.plugin.notifiers.DropNotifier;
@@ -14,11 +15,13 @@ import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
+import net.runelite.api.clan.ClanChannel;
 import net.runelite.api.events.ActorDeath;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.InteractingChanged;
+import net.runelite.api.events.PlayerSpawned;
 import net.runelite.api.events.StatChanged;
 import net.runelite.api.events.WidgetLoaded;
 import net.runelite.client.config.ConfigManager;
@@ -66,13 +69,14 @@ public class CollectivePlugin extends Plugin
 	@Inject
 	private CombatNotifier combatNotifier;
 
+	private final EventRecorder eventRecorder = new EventRecorder();
 	private CollectivePanel panel;
 	private NavigationButton navButton;
 
 	@Override
 	protected void startUp() throws Exception
 	{
-		panel = new CollectivePanel(config, webhookClient);
+		panel = new CollectivePanel(config, webhookClient, eventRecorder);
 
 		final NavigationButton.NavigationButtonBuilder builder = NavigationButton.builder()
 			.tooltip(PanelConstants.NAV_TOOLTIP)
@@ -181,6 +185,41 @@ public class CollectivePlugin extends Plugin
 	{
 		clanRankTracker.onGameTick();
 		milestoneNotifier.onGameTick();
+
+		if (eventRecorder.isRecording())
+		{
+			// Seed runs at most once per session; timer needs a periodic repaint regardless.
+			eventRecorder.seedIfNeeded(client);
+			final CollectivePanel current = panel;
+			if (current != null)
+			{
+				javax.swing.SwingUtilities.invokeLater(current::refreshEvents);
+			}
+		}
+	}
+
+	@Subscribe
+	public void onPlayerSpawned(final PlayerSpawned event)
+	{
+		if (!eventRecorder.isRecording())
+		{
+			return;
+		}
+
+		final ClanChannel channel = client.getClanChannel();
+		if (channel == null)
+		{
+			return;
+		}
+
+		if (eventRecorder.onPlayerSpawned(event.getPlayer(), channel))
+		{
+			final CollectivePanel current = panel;
+			if (current != null)
+			{
+				javax.swing.SwingUtilities.invokeLater(current::refreshEvents);
+			}
+		}
 	}
 
 	@Subscribe

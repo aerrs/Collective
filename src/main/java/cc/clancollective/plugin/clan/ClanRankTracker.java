@@ -4,8 +4,10 @@ import cc.clancollective.plugin.CollectiveConfig;
 import cc.clancollective.plugin.net.EmbedStyle;
 import cc.clancollective.plugin.net.WebhookClient;
 import cc.clancollective.plugin.net.WebhookPayload;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -191,6 +193,15 @@ public class ClanRankTracker
 
 	private static String key(final String clanName)
 	{
-		return SNAPSHOT_KEY + "_" + clanName.toLowerCase().replaceAll("[^a-z0-9]", "");
+		// Hex-encode the lowercased name so distinct names can't collapse to the same key.
+		// (The old scheme stripped punctuation, making "Clan-A", "Clan A" and "ClanA" identical.)
+		final byte[] bytes = clanName.toLowerCase(Locale.ROOT).getBytes(StandardCharsets.UTF_8);
+		final StringBuilder sb = new StringBuilder(SNAPSHOT_KEY).append('_');
+		for (final byte b : bytes)
+		{
+			sb.append(Character.forDigit((b >> 4) & 0xF, 16));
+			sb.append(Character.forDigit(b & 0xF, 16));
+		}
+		return sb.toString();
 	}
 }

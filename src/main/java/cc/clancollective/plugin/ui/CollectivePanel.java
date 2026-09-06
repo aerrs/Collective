@@ -1,16 +1,23 @@
 package cc.clancollective.plugin.ui;
 
 import cc.clancollective.plugin.CollectiveConfig;
+import cc.clancollective.plugin.events.EventRecorder;
 import cc.clancollective.plugin.net.WebhookClient;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Graphics2D;
+import java.awt.GridLayout;
 import java.awt.RenderingHints;
+import java.awt.Toolkit;
+import java.awt.datatransfer.StringSelection;
 import java.awt.image.BufferedImage;
+import java.time.Duration;
+import java.util.List;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.ImageIcon;
+import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
@@ -23,14 +30,22 @@ public class CollectivePanel extends PluginPanel
 {
 	private final CollectiveConfig config;
 	private final WebhookClient webhookClient;
+	private final EventRecorder recorder;
 	private final JPanel feedsBody = new JPanel();
 	private final Runnable healthListener = this::onHealthChanged;
 
-	public CollectivePanel(final CollectiveConfig config, final WebhookClient webhookClient)
+	private JButton eventToggle;
+	private JButton eventCopy;
+	private JButton eventReset;
+	private JLabel eventStatus;
+
+	public CollectivePanel(final CollectiveConfig config, final WebhookClient webhookClient,
+		final EventRecorder recorder)
 	{
 		super(false);
 		this.config = config;
 		this.webhookClient = webhookClient;
+		this.recorder = recorder;
 
 		setBackground(PanelConstants.BG);
 		setBorder(new EmptyBorder(0, 0, 0, 0));
@@ -43,6 +58,7 @@ public class CollectivePanel extends PluginPanel
 
 		content.add(buildHeader());
 		content.add(buildFeedsSection());
+		content.add(buildEventsSection());
 		content.add(buildSetupSection());
 		content.add(buildFooter());
 
@@ -183,6 +199,125 @@ public class CollectivePanel extends PluginPanel
 	private void onHealthChanged()
 	{
 		SwingUtilities.invokeLater(this::refreshFeeds);
+	}
+
+	private JPanel buildEventsSection()
+	{
+		final JPanel body = new JPanel();
+		body.setBackground(PanelConstants.BG);
+		body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+		body.setBorder(new EmptyBorder(PanelConstants.ROW_PADDING_Y, PanelConstants.ROW_PADDING_X,
+			PanelConstants.ROW_PADDING_Y, PanelConstants.ROW_PADDING_X));
+
+		eventStatus = CollectiveSwing.smallLabel(" ", PanelConstants.TEXT);
+		eventStatus.setToolTipText(PanelConstants.EVENT_IDLE_HINT);
+		eventStatus.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+		eventToggle = flatButton(PanelConstants.EVENT_START);
+		CollectiveSwing.onClick(eventToggle, this::onToggleEvent);
+
+		final JPanel controls = new JPanel(new GridLayout(1, 2, PanelConstants.ROW_GAP, 0));
+		controls.setBackground(PanelConstants.BG);
+		controls.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+		eventCopy = flatButton(PanelConstants.EVENT_COPY);
+		CollectiveSwing.onClick(eventCopy, this::onCopyEvent);
+
+		eventReset = flatButton(PanelConstants.EVENT_RESET);
+		CollectiveSwing.onClick(eventReset, this::onResetEvent);
+
+		controls.add(eventCopy);
+		controls.add(eventReset);
+
+		body.add(eventStatus);
+		body.add(javax.swing.Box.createVerticalStrut(PanelConstants.ROW_GAP));
+		body.add(eventToggle);
+		body.add(javax.swing.Box.createVerticalStrut(PanelConstants.ROW_GAP));
+		body.add(controls);
+
+		refreshEvents();
+		return section(PanelConstants.SECTION_EVENTS, body);
+	}
+
+	private JButton flatButton(final String text)
+	{
+		final JButton button = new JButton(text);
+		button.setFocusPainted(false);
+		button.setBackground(PanelConstants.SURFACE);
+		button.setForeground(PanelConstants.TEXT);
+		button.setBorder(BorderFactory.createCompoundBorder(
+			new MatteBorder(1, 1, 1, 1, PanelConstants.BORDER),
+			new EmptyBorder(PanelConstants.ROW_PADDING_Y, PanelConstants.ROW_PADDING_X,
+				PanelConstants.ROW_PADDING_Y, PanelConstants.ROW_PADDING_X)));
+		button.setAlignmentX(Component.LEFT_ALIGNMENT);
+		button.setMaximumSize(new Dimension(Integer.MAX_VALUE, button.getPreferredSize().height));
+		return button;
+	}
+
+	private void onToggleEvent()
+	{
+		if (recorder.isRecording())
+		{
+			recorder.stop();
+		}
+		else
+		{
+			recorder.start();
+		}
+		refreshEvents();
+	}
+
+	private void onCopyEvent()
+	{
+		if (recorder.count() == 0)
+		{
+			return;
+		}
+		final String text = recorder.toClipboard();
+		if (!text.isEmpty())
+		{
+			Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(text), null);
+		}
+	}
+
+	private void onResetEvent()
+	{
+		if (recorder.isRecording() || recorder.count() == 0)
+		{
+			return;
+		}
+		recorder.reset();
+		refreshEvents();
+	}
+
+	public void refreshEvents()
+	{
+		if (eventToggle == null)
+		{
+			return;
+		}
+
+		final boolean recording = recorder.isRecording();
+		final int count = recorder.count();
+
+		eventToggle.setText(recording ? PanelConstants.EVENT_STOP : PanelConstants.EVENT_START);
+		eventStatus.setText(formatTimer(recorder.elapsed()) + "  \u00b7  " + count);
+
+		final List<String> names = recorder.names();
+		eventStatus.setToolTipText(names.isEmpty()
+			? PanelConstants.EVENT_NO_NAMES
+			: "<html>" + String.join("<br>", names) + "</html>");
+
+		eventCopy.setEnabled(count > 0);
+		eventReset.setEnabled(!recording && count > 0);
+	}
+
+	private static String formatTimer(final Duration elapsed)
+	{
+		final long total = Math.max(0, elapsed.getSeconds());
+		final long minutes = total / 60;
+		final long seconds = total % 60;
+		return String.format("%02d:%02d", minutes, seconds);
 	}
 
 	private JPanel buildSetupSection()

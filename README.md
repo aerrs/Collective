@@ -7,7 +7,12 @@ Multi-clan Discord integration for OSRS clans. Posts gameplay events to your cla
 - **Webhook delivery** — async, multiple URLs, retries on transient failures, Discord rate-limit aware.
 - **Screenshots** — optional, with chat privacy (default: hide all chat) so private messages don't leak into a post.
 - **Drops** — posts item drops from NPC kills and PKs above a value threshold you set.
-- **Clan chat relay** — posts your clan channel's messages, broadcasts, and member joins/leaves.
+- **Clan chat relay** — posts your clan channel's messages and broadcasts, including sender names.
+- **Clan administration** — posts applications, invites, joins, leaves, and rank changes (promotions/demotions).
+- **Milestones** — combat achievement tasks, personal bests, pets, level-ups, XP milestones, quests, and clues.
+- **Combat** — posts your deaths with an estimated value of items lost.
+- **PvP** — relays clan PvP broadcasts (kills, deaths, loot keys).
+- **Event attendance** — a side panel tool that records which clan members are present during a recorded event, copyable to clipboard.
 
 ## Configure
 
