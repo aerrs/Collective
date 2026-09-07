@@ -2,6 +2,7 @@ package cc.clancollective.plugin.net;
 
 import org.junit.Test;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 public class EmbedStyleTest
@@ -22,5 +23,26 @@ public class EmbedStyleTest
 	public void wikiSpriteResolvesUnderWikiImages()
 	{
 		assertTrue(EmbedStyle.clanIcon().startsWith("https://oldschool.runescape.wiki/images/"));
+	}
+
+	@Test
+	public void clanRankIconSentenceCasesMultiWordTitles()
+	{
+		assertEquals("https://oldschool.runescape.wiki/images/Clan_icon_-_Deputy_owner.png",
+			EmbedStyle.clanRankIcon("Deputy Owner"));
+	}
+
+	@Test
+	public void clanRankIconHandlesSingleWordTitles()
+	{
+		assertEquals("https://oldschool.runescape.wiki/images/Clan_icon_-_Owner.png",
+			EmbedStyle.clanRankIcon("Owner"));
+	}
+
+	@Test
+	public void clanRankIconReturnsNullForBlankTitle()
+	{
+		assertNull(EmbedStyle.clanRankIcon(null));
+		assertNull(EmbedStyle.clanRankIcon("   "));
 	}
 }

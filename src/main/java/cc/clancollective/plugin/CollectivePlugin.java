@@ -25,6 +25,7 @@ import net.runelite.api.events.PlayerSpawned;
 import net.runelite.api.events.StatChanged;
 import net.runelite.api.events.WidgetLoaded;
 import net.runelite.client.config.ConfigManager;
+import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.events.NpcLootReceived;
 import net.runelite.client.events.PlayerLootReceived;
 import net.runelite.client.eventbus.Subscribe;
@@ -141,7 +142,6 @@ public class CollectivePlugin extends Plugin
 		switch (event.getType())
 		{
 			case GAMEMESSAGE:
-				// Skip messages this plugin (or others) inject into the chatbox to avoid feedback loops.
 				if (!"runelite".equals(event.getName()))
 				{
 					milestoneNotifier.onGameMessage(event.getMessage());
@@ -150,6 +150,7 @@ public class CollectivePlugin extends Plugin
 			case CLAN_MESSAGE:
 			case BROADCAST:
 				combatNotifier.onClanBroadcast(event.getMessage());
+				milestoneNotifier.onClanBroadcast(event.getMessage());
 				break;
 			default:
 				break;
@@ -185,10 +186,10 @@ public class CollectivePlugin extends Plugin
 	{
 		clanRankTracker.onGameTick();
 		milestoneNotifier.onGameTick();
+		combatNotifier.onGameTick();
 
 		if (eventRecorder.isRecording())
 		{
-			// Seed runs at most once per session; timer needs a periodic repaint regardless.
 			eventRecorder.seedIfNeeded(client);
 			final CollectivePanel current = panel;
 			if (current != null)
@@ -230,6 +231,20 @@ public class CollectivePlugin extends Plugin
 			clanRankTracker.reset();
 			milestoneNotifier.reset();
 			combatNotifier.reset();
+		}
+	}
+
+	@Subscribe
+	public void onConfigChanged(final ConfigChanged event)
+	{
+		if (!CollectiveConfig.GROUP.equals(event.getGroup()))
+		{
+			return;
+		}
+		final CollectivePanel current = panel;
+		if (current != null)
+		{
+			current.refreshFeedHealth();
 		}
 	}
 
