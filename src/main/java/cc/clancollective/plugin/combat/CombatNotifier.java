@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.annotation.Nullable;
 import javax.inject.Inject;
@@ -25,25 +26,15 @@ import net.runelite.api.NPC;
 import net.runelite.api.Player;
 import net.runelite.api.Prayer;
 import net.runelite.api.SkullIcon;
+import net.runelite.api.clan.ClanChannel;
 import net.runelite.api.events.ActorDeath;
 import net.runelite.api.events.InteractingChanged;
 import net.runelite.api.gameval.InventoryID;
 import net.runelite.api.gameval.VarbitID;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.util.QuantityFormatter;
+import net.runelite.client.util.Text;
 
-/**
- * Posts combat events to the combat webhook.
- *
- * <p>Deaths are detected locally from {@link ActorDeath} on the local player; the value lost is
- * inferred from inventory and equipment minus the items kept on death (3, or 4 with Protect Item,
- * 0 skulled, 0 for Ultimate Ironmen). Region-based danger tables are intentionally not used - the
- * only gate is the value-lost threshold.
- *
- * <p>PvP kills, deaths and loot keys are relayed straight from the clan broadcasts that the game
- * itself produces; those broadcasts are suppressed in the generic chat relay so they arrive here
- * only, routed to the combat webhook.
- */
 @Slf4j
 @Singleton
 public class CombatNotifier
@@ -57,14 +48,19 @@ public class CombatNotifier
 	private static final Pattern PK_DEATH = Pattern.compile("has been defeated by ", Pattern.CASE_INSENSITIVE);
 	private static final Pattern LOOT_KEY = Pattern.compile("has opened a loot key worth ", Pattern.CASE_INSENSITIVE);
 
+	private static final int DEATH_MERGE_TICKS = 2;
+	private static final int DEATH_MERGE_MAX_TICKS = 6;
+
 	private final Client client;
 	private final CollectiveConfig config;
 	private final ItemManager itemManager;
 	private final WebhookClient webhookClient;
 	private final ScreenshotUtil screenshotUtil;
 
-	// Last actor the local player interacted with, used to attribute a PvM death to a killer NPC.
 	private WeakReference<Actor> lastTarget = new WeakReference<>(null);
+	private PendingDeath pendingDeath;
+	private String recentPvpKiller;
+	private int recentPvpKillerTicks;
 
 	@Inject
 	public CombatNotifier(final Client client, final CollectiveConfig config,
@@ -81,11 +77,46 @@ public class CombatNotifier
 	public void reset()
 	{
 		lastTarget = new WeakReference<>(null);
+		pendingDeath = null;
+		recentPvpKiller = null;
+		recentPvpKillerTicks = 0;
+	}
+
+	public void onGameTick()
+	{
+		if (recentPvpKillerTicks > 0 && --recentPvpKillerTicks == 0)
+		{
+			recentPvpKiller = null;
+		}
+
+		final PendingDeath pd = pendingDeath;
+		if (pd == null)
+		{
+			return;
+		}
+
+		pd.ticks++;
+		final boolean ready = !pd.wantScreenshot || pd.shotReady;
+		if ((ready && pd.ticks >= DEATH_MERGE_TICKS) || pd.ticks >= DEATH_MERGE_MAX_TICKS)
+		{
+			flushDeath();
+		}
 	}
 
 	private boolean enabled()
 	{
 		return !config.combatWebhook().trim().isEmpty();
+	}
+
+	private boolean clanFilterMatches()
+	{
+		final String filter = config.clanFilter().trim();
+		if (filter.isEmpty())
+		{
+			return true;
+		}
+		final ClanChannel channel = client.getClanChannel();
+		return channel != null && filter.equalsIgnoreCase(channel.getName());
 	}
 
 	public void onInteractingChanged(final InteractingChanged event)
@@ -106,12 +137,12 @@ public class CombatNotifier
 		}
 		if (enabled() && config.notifyDeaths())
 		{
-			handleDeath();
+			beginDeath();
 		}
 		lastTarget = new WeakReference<>(null);
 	}
 
-	private void handleDeath()
+	private void beginDeath()
 	{
 		final List<PricedItem> items = collectItems();
 		final long lost = valueLost(items, keepCount());
@@ -121,8 +152,10 @@ public class CombatNotifier
 			return;
 		}
 
-		final Actor killer = identifyKiller();
-		final String killerName = killer != null && killer.getName() != null ? killer.getName() : null;
+		if (pendingDeath != null)
+		{
+			flushDeath();
+		}
 
 		final String rsn = localRsn();
 		final String author = rsn != null ? rsn : "A clan member";
@@ -133,39 +166,181 @@ public class CombatNotifier
 			.color(EmbedStyle.DEATH)
 			.field("Estimated value lost", QuantityFormatter.quantityToStackSize(lost) + " gp", true);
 
-		if (killerName != null)
+		final PendingDeath pd = new PendingDeath(payload, config.combatScreenshot());
+
+		if (recentPvpKiller != null)
 		{
-			payload.field("Killed by", killerName, true);
+			pd.killer = recentPvpKiller;
+			pd.killerConfirmed = true;
+			recentPvpKiller = null;
+			recentPvpKillerTicks = 0;
+		}
+		else
+		{
+			final Actor confirmed = confirmedKiller();
+			if (confirmed != null && confirmed.getName() != null)
+			{
+				pd.killer = confirmed.getName();
+				pd.killerConfirmed = true;
+			}
+			else
+			{
+				final Actor probable = probableKiller();
+				pd.killer = probable != null ? probable.getName() : null;
+				pd.killerConfirmed = false;
+			}
 		}
 
-		post(payload);
+		pendingDeath = pd;
+
+		if (pd.wantScreenshot)
+		{
+			screenshotUtil.capture(shot ->
+			{
+				if (pendingDeath == pd && !pd.sent)
+				{
+					pd.shot = shot;
+					pd.shotReady = true;
+				}
+			});
+		}
 	}
 
-	public void onClanBroadcast(final String message)
+	private void flushDeath()
 	{
-		if (!enabled() || !config.notifyPvp())
+		final PendingDeath pd = pendingDeath;
+		if (pd == null || pd.sent)
+		{
+			return;
+		}
+		pd.sent = true;
+		pendingDeath = null;
+
+		if (pd.killer != null)
+		{
+			pd.payload.field(pd.killerConfirmed ? "Killed by" : "Likely killer", pd.killer, true);
+		}
+
+		final String webhook = config.combatWebhook();
+		if (pd.wantScreenshot && pd.shot != null)
+		{
+			pd.payload.image(pd.shot.getFilename());
+			webhookClient.send(webhook, pd.payload, pd.shot);
+		}
+		else
+		{
+			webhookClient.send(webhook, pd.payload);
+		}
+	}
+
+	private void applyPvpKiller(@Nullable final String killer)
+	{
+		if (killer == null)
+		{
+			return;
+		}
+		if (pendingDeath != null && !pendingDeath.sent)
+		{
+			pendingDeath.killer = killer;
+			pendingDeath.killerConfirmed = true;
+		}
+		else
+		{
+			recentPvpKiller = killer;
+			recentPvpKillerTicks = DEATH_MERGE_TICKS;
+		}
+	}
+
+	public void onClanBroadcast(final String rawMessage)
+	{
+		if (!enabled() || !config.notifyPvp() || !clanFilterMatches())
 		{
 			return;
 		}
 
-		if (PK_DEATH.matcher(message).find())
+		final String message = Text.removeTags(rawMessage);
+		final String rsn = localRsn();
+
+		final Matcher death = PK_DEATH.matcher(message);
+		if (death.find())
 		{
-			relay(KIND_PKDEATH, message, EmbedStyle.DEATH, EmbedStyle.pkIcon());
+			if (config.notifyDeaths() && isSubject(message, death.start(), rsn))
+			{
+				applyPvpKiller(killerAfter(message, death.end()));
+				return;
+			}
+			relay(KIND_PKDEATH, message, EmbedStyle.DEATH, EmbedStyle.pkIcon(),
+				isSubject(message, death.start(), rsn));
+			return;
 		}
-		else if (PK_KILL.matcher(message).find())
+
+		final Matcher kill = PK_KILL.matcher(message);
+		if (kill.find())
 		{
-			relay(KIND_PK, message, EmbedStyle.PK, EmbedStyle.pkIcon());
+			relay(KIND_PK, message, EmbedStyle.PK, EmbedStyle.pkIcon(),
+				isSubject(message, kill.start(), rsn));
+			return;
 		}
-		else if (LOOT_KEY.matcher(message).find())
+
+		final Matcher lootKey = LOOT_KEY.matcher(message);
+		if (lootKey.find())
 		{
-			relay(KIND_LOOTKEY, message, EmbedStyle.LOOTKEY, EmbedStyle.lootKeyIcon());
+			relay(KIND_LOOTKEY, message, EmbedStyle.LOOTKEY, EmbedStyle.lootKeyIcon(),
+				isSubject(message, lootKey.start(), rsn));
 		}
 	}
 
-	/**
-	 * @return true if the broadcast is a PvP kill, death or loot key - so the chat relay can
-	 * exclude it and leave it to this notifier.
-	 */
+	@Nullable
+	static String killerAfter(final String message, final int from)
+	{
+		if (from < 0 || from > message.length())
+		{
+			return null;
+		}
+		String tail = message.substring(from).trim();
+		final int and = tail.indexOf(" and ");
+		if (and > 0)
+		{
+			tail = tail.substring(0, and);
+		}
+		tail = tail.replaceAll("[.!]+$", "").trim();
+		return tail.isEmpty() ? null : tail;
+	}
+
+	static boolean subjectMatches(final String message, @Nullable final String rsn)
+	{
+		return isSubject(message, subjectEnd(message), rsn);
+	}
+
+	private static boolean isSubject(final String message, final int verbStart, @Nullable final String rsn)
+	{
+		if (rsn == null || verbStart <= 0)
+		{
+			return false;
+		}
+		return message.substring(0, verbStart).trim().equalsIgnoreCase(rsn);
+	}
+
+	private static int subjectEnd(final String message)
+	{
+		final Matcher death = PK_DEATH.matcher(message);
+		if (death.find())
+		{
+			return death.start();
+		}
+		final Matcher kill = PK_KILL.matcher(message);
+		if (kill.find())
+		{
+			return kill.start();
+		}
+		final Matcher lootKey = LOOT_KEY.matcher(message);
+		if (lootKey.find())
+		{
+			return lootKey.start();
+		}
+		return -1;
+	}
+
 	public static boolean isPvpBroadcast(final String message)
 	{
 		return PK_DEATH.matcher(message).find()
@@ -174,7 +349,7 @@ public class CombatNotifier
 	}
 
 	private void relay(final String kind, final String message, final Color color,
-		final String icon)
+		final String icon, final boolean allowScreenshot)
 	{
 		final String rsn = localRsn();
 		final WebhookPayload payload = WebhookPayload.of(kind, rsn)
@@ -182,7 +357,7 @@ public class CombatNotifier
 			.description(WebhookPayload.quote(WebhookPayload.bold(message)))
 			.color(color);
 
-		post(payload);
+		post(payload, allowScreenshot);
 	}
 
 	private List<PricedItem> collectItems()
@@ -253,12 +428,11 @@ public class CombatNotifier
 
 	private boolean isUltimateIronman()
 	{
-		// VarbitID.IRONMAN: 2 = Ultimate Ironman.
 		return client.getVarbitValue(VarbitID.IRONMAN) == 2;
 	}
 
 	@Nullable
-	private Actor identifyKiller()
+	private Actor confirmedKiller()
 	{
 		final Player local = client.getLocalPlayer();
 		if (local == null)
@@ -271,6 +445,17 @@ public class CombatNotifier
 		{
 			return last;
 		}
+		return null;
+	}
+
+	@Nullable
+	private Actor probableKiller()
+	{
+		final Player local = client.getLocalPlayer();
+		if (local == null)
+		{
+			return null;
+		}
 
 		return client.getTopLevelWorldView().npcs().stream()
 			.filter(npc -> npc != null && npc.getInteracting() == local && !npc.isDead())
@@ -279,10 +464,10 @@ public class CombatNotifier
 			.orElse(null);
 	}
 
-	private void post(final WebhookPayload payload)
+	private void post(final WebhookPayload payload, final boolean allowScreenshot)
 	{
 		final String webhook = config.combatWebhook();
-		if (config.combatScreenshot())
+		if (allowScreenshot && config.combatScreenshot())
 		{
 			final Consumer<Screenshot> consumer = shot ->
 			{
@@ -314,6 +499,24 @@ public class CombatNotifier
 			this.id = id;
 			this.quantity = quantity;
 			this.unitPrice = unitPrice;
+		}
+	}
+
+	private static final class PendingDeath
+	{
+		private final WebhookPayload payload;
+		private final boolean wantScreenshot;
+		private String killer;
+		private boolean killerConfirmed;
+		private Screenshot shot;
+		private boolean shotReady;
+		private int ticks;
+		private boolean sent;
+
+		private PendingDeath(final WebhookPayload payload, final boolean wantScreenshot)
+		{
+			this.payload = payload;
+			this.wantScreenshot = wantScreenshot;
 		}
 	}
 }
