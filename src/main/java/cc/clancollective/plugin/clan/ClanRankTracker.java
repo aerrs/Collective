@@ -26,14 +26,14 @@ public class ClanRankTracker
 	private static final String KIND_RANK = "rank";
 	private static final String SNAPSHOT_KEY = "rankSnapshot";
 	private static final int LOAD_DELAY_TICKS = 5;
+	private static final int RECHECK_TICKS = 100;
 
 	private final Client client;
 	private final CollectiveConfig config;
 	private final WebhookClient webhookClient;
 	private final ConfigManager configManager;
 
-	private boolean checkedThisSession;
-	private int ticks;
+	private int ticksUntilCheck = LOAD_DELAY_TICKS;
 
 	@Inject
 	public ClanRankTracker(final Client client, final CollectiveConfig config,
@@ -47,27 +47,30 @@ public class ClanRankTracker
 
 	public void onGameTick()
 	{
-		if (checkedThisSession)
+		if (--ticksUntilCheck > 0)
 		{
 			return;
 		}
 
 		final ClanSettings settings = client.getClanSettings();
-		if (settings == null)
-		{
-			return;
-		}
-
-		if (++ticks < LOAD_DELAY_TICKS)
-		{
-			return;
-		}
-
-		checkedThisSession = true;
-
 		final ClanChannel channel = client.getClanChannel();
 		final String clanName = channel != null ? channel.getName() : null;
-		if (clanName == null)
+		if (settings == null || clanName == null)
+		{
+			ticksUntilCheck = LOAD_DELAY_TICKS;
+			return;
+		}
+
+		ticksUntilCheck = RECHECK_TICKS;
+
+		if (!config.relayRankChanges() || config.clanAdminWebhook().trim().isEmpty())
+		{
+			clearSnapshot(clanName);
+			return;
+		}
+
+		final String filter = config.clanFilter().trim();
+		if (!filter.isEmpty() && !filter.equalsIgnoreCase(clanName))
 		{
 			return;
 		}
@@ -77,26 +80,21 @@ public class ClanRankTracker
 
 	public void reset()
 	{
-		checkedThisSession = false;
-		ticks = 0;
+		ticksUntilCheck = LOAD_DELAY_TICKS;
 	}
 
 	private void compare(final ClanSettings settings, final String clanName)
 	{
 		final Map<String, Integer> current = snapshot(settings);
 		final Map<String, Integer> previous = load(clanName);
-		save(clanName, current);
 
 		if (previous.isEmpty())
 		{
+			save(clanName, current);
 			return;
 		}
 
-		if (!config.relayRankChanges() || config.clanAdminWebhook().trim().isEmpty())
-		{
-			return;
-		}
-
+		boolean changed = current.size() != previous.size();
 		for (final Map.Entry<String, Integer> entry : current.entrySet())
 		{
 			final Integer old = previous.get(entry.getKey());
@@ -105,6 +103,12 @@ public class ClanRankTracker
 				continue;
 			}
 			post(settings, clanName, entry.getKey(), old, entry.getValue());
+			changed = true;
+		}
+
+		if (changed)
+		{
+			save(clanName, current);
 		}
 	}
 
@@ -177,6 +181,11 @@ public class ClanRankTracker
 		return map;
 	}
 
+	private void clearSnapshot(final String clanName)
+	{
+		configManager.unsetConfiguration(CollectiveConfig.GROUP, key(clanName));
+	}
+
 	private void save(final String clanName, final Map<String, Integer> snapshot)
 	{
 		final StringBuilder sb = new StringBuilder();
@@ -193,8 +202,6 @@ public class ClanRankTracker
 
 	private static String key(final String clanName)
 	{
-		// Hex-encode the lowercased name so distinct names can't collapse to the same key.
-		// (The old scheme stripped punctuation, making "Clan-A", "Clan A" and "ClanA" identical.)
 		final byte[] bytes = clanName.toLowerCase(Locale.ROOT).getBytes(StandardCharsets.UTF_8);
 		final StringBuilder sb = new StringBuilder(SNAPSHOT_KEY).append('_');
 		for (final byte b : bytes)

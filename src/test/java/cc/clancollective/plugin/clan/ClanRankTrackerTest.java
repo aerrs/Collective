@@ -47,6 +47,7 @@ public class ClanRankTrackerTest
 
 		when(config.relayRankChanges()).thenReturn(true);
 		when(config.clanAdminWebhook()).thenReturn(ADMIN_WEBHOOK);
+		when(config.clanFilter()).thenReturn("");
 
 		store = new HashMap<>();
 		when(configManager.getConfiguration(eq(CollectiveConfig.GROUP), anyString()))
@@ -185,7 +186,7 @@ public class ClanRankTrackerTest
 	}
 
 	@Test
-	public void checksOnlyOncePerSession()
+	public void detectsRankChangeAfterReset()
 	{
 		runTicks(settings("HLDRS", roster("Sasha", 10)));
 		tracker.reset();
