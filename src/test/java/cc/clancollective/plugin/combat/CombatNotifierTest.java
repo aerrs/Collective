@@ -24,7 +24,6 @@ public class CombatNotifierTest
 			item(1, 250_000),
 			item(1, 100_000),
 			item(1, 50_000));
-		// keep top 3 (1M + 500k + 250k), lose 100k + 50k
 		assertEquals(150_000, CombatNotifier.valueLost(items, 3));
 	}
 
@@ -46,14 +45,12 @@ public class CombatNotifierTest
 			item(1, 250_000),
 			item(1, 100_000),
 			item(1, 50_000));
-		// keep top 4, lose only the 50k item
 		assertEquals(50_000, CombatNotifier.valueLost(items, 4));
 	}
 
 	@Test
 	public void keepCountSpansStackedQuantities()
 	{
-		// a single stack of 5 identical items: keep 3, lose 2 units
 		final List<CombatNotifier.PricedItem> items = Collections.singletonList(item(5, 10_000));
 		assertEquals(20_000, CombatNotifier.valueLost(items, 3));
 	}
@@ -79,5 +76,49 @@ public class CombatNotifierTest
 		assertFalse(CombatNotifier.isPvpBroadcast("Tester has received a drop: Dragon claws"));
 		assertFalse(CombatNotifier.isPvpBroadcast("Tester has completed a Hard combat task: Peach Conjurer"));
 		assertFalse(CombatNotifier.isPvpBroadcast("Tester has reached a total level of 2000"));
+	}
+
+	@Test
+	public void screenshotsOnlyWhenLocalPlayerIsSubject()
+	{
+		assertTrue(CombatNotifier.subjectMatches("AER5 has been defeated by Sir Towliee", "AER5"));
+		assertTrue(CombatNotifier.subjectMatches("AER5 has defeated Sir Towliee", "AER5"));
+		assertTrue(CombatNotifier.subjectMatches("AER5 has opened a loot key worth 3,000,000 coins!", "AER5"));
+	}
+
+	@Test
+	public void doesNotScreenshotBroadcastsAboutOtherMembers()
+	{
+		assertFalse(CombatNotifier.subjectMatches("Joji rains has been defeated by CAPT RED BAR", "AER5"));
+		assertFalse(CombatNotifier.subjectMatches("Joji rains has been defeated by AER5", "AER5"));
+	}
+
+	@Test
+	public void subjectMatchIsCaseInsensitiveButNotSubstring()
+	{
+		assertTrue(CombatNotifier.subjectMatches("aer5 has defeated Victim", "AER5"));
+		assertFalse(CombatNotifier.subjectMatches("Joji rains has been defeated by CAPT RED BAR", "Red"));
+	}
+
+	@Test
+	public void subjectMatchHandlesNullRsn()
+	{
+		assertFalse(CombatNotifier.subjectMatches("AER5 has defeated Victim", null));
+	}
+
+	@Test
+	public void extractsKillerFromDeathBroadcast()
+	{
+		final String message = "AER5 has been defeated by Sir Towliee";
+		final int by = message.indexOf("has been defeated by ") + "has been defeated by ".length();
+		assertEquals("Sir Towliee", CombatNotifier.killerAfter(message, by));
+	}
+
+	@Test
+	public void extractsKillerAndStripsTrailingLootClause()
+	{
+		final String message = "AER5 has been defeated by Pker and lost (1,200,000) coins!";
+		final int by = message.indexOf("has been defeated by ") + "has been defeated by ".length();
+		assertEquals("Pker", CombatNotifier.killerAfter(message, by));
 	}
 }
