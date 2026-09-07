@@ -11,8 +11,10 @@ import cc.clancollective.plugin.util.ScreenshotUtil;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -23,22 +25,15 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.Player;
 import net.runelite.api.Skill;
+import net.runelite.api.clan.ClanChannel;
 import net.runelite.api.events.StatChanged;
 import net.runelite.api.events.WidgetLoaded;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.util.QuantityFormatter;
+import net.runelite.client.util.Text;
 
-/**
- * Posts personal milestones to the milestones webhook: combat tasks, personal bests, pets,
- * level-ups, quests and clues.
- *
- * <p>Combat tasks, personal bests and pets are detected from the first-person game message the
- * client shows the local player (these also generate clan broadcasts, which the chat relay
- * suppresses so a milestone is not posted twice). Level-ups come from {@link StatChanged}, quests
- * and clues from the reward interfaces.
- */
 @Slf4j
 @Singleton
 public class MilestoneNotifier
@@ -52,13 +47,16 @@ public class MilestoneNotifier
 
 	private static final long XP_MILLION = 1_000_000L;
 	private static final int MAX_REAL_LEVEL = 99;
+	private static final int PB_DEDUP_TICKS = 3;
 
 	private static final Pattern CA_PATTERN = Pattern.compile(
 		"Congratulations, you've completed an? (?<tier>\\w+) combat task: (?<task>.+?)\\.?$");
 	private static final Pattern CA_POINTS_SUFFIX = Pattern.compile("\\s*\\(\\d+ points?\\)$");
-	private static final Pattern PB_PATTERN = Pattern.compile(
-		"(?:Subdued in|Duration:|Fight duration:|Challenge duration:|Corrupted challenge duration:|Overall time:|Lap duration:|Team size:).*?"
-			+ "(?<time>\\d+:\\d{2}(?:\\.\\d{2})?)(?<pb>[.\\s]*\\(new personal best\\)|[.\\s]*\\(new pb\\))",
+	private static final Pattern NEW_PB_PATTERN = Pattern.compile(
+		"(?<time>[0-9]+:[0-9]{2}(?:\\.[0-9]+)?)\\.?\\s*\\(new personal best\\)",
+		Pattern.CASE_INSENSITIVE);
+	private static final Pattern PB_BROADCAST_PATTERN = Pattern.compile(
+		"(?<names>.+?) achieved a new (?<activity>.+?) personal best: (?<time>[0-9:]+(?:\\.[0-9]+)?)",
 		Pattern.CASE_INSENSITIVE);
 	private static final Pattern CLUE_PATTERN = Pattern.compile(
 		"You have completed (?<count>\\d+) (?<tier>\\w+) Treasure Trails?\\.");
@@ -77,9 +75,9 @@ public class MilestoneNotifier
 
 	private final Map<Skill, Integer> lastLevel = new EnumMap<>(Skill.class);
 	private final Map<Skill, Long> lastXpMilestone = new EnumMap<>(Skill.class);
+	private final Set<String> recentPbTimes = new HashSet<>();
+	private int pbDedupTicks;
 
-	// Clue detection spans a game message followed by a widget load; hold the parsed tier/count
-	// between the two, and drop it if the widget doesn't arrive promptly.
 	private String pendingClueTier = "";
 	private int pendingClueCount = -1;
 	private int clueBadTicks = 0;
@@ -100,6 +98,8 @@ public class MilestoneNotifier
 	{
 		lastLevel.clear();
 		lastXpMilestone.clear();
+		recentPbTimes.clear();
+		pbDedupTicks = 0;
 		clearPendingClue();
 	}
 
@@ -108,18 +108,41 @@ public class MilestoneNotifier
 		return !config.milestonesWebhook().trim().isEmpty();
 	}
 
+	private boolean pbEnabled()
+	{
+		return !pbWebhook().trim().isEmpty();
+	}
+
+	private String pbWebhook()
+	{
+		final String pb = config.pbWebhook().trim();
+		return pb.isEmpty() ? config.milestonesWebhook() : config.pbWebhook();
+	}
+
+	private boolean clanFilterMatches()
+	{
+		final String filter = config.clanFilter().trim();
+		if (filter.isEmpty())
+		{
+			return true;
+		}
+		final ClanChannel channel = client.getClanChannel();
+		return channel != null && filter.equalsIgnoreCase(channel.getName());
+	}
+
 	public void onGameMessage(final String message)
 	{
+		if (config.notifyPersonalBests() && pbEnabled() && handlePersonalBest(message))
+		{
+			return;
+		}
+
 		if (!enabled())
 		{
 			return;
 		}
 
 		if (config.notifyCombatTasks() && handleCombatTask(message))
-		{
-			return;
-		}
-		if (config.notifyPersonalBests() && handlePersonalBest(message))
 		{
 			return;
 		}
@@ -130,6 +153,39 @@ public class MilestoneNotifier
 		if (config.notifyClues())
 		{
 			parseClue(message);
+		}
+	}
+
+	public void onClanBroadcast(final String rawMessage)
+	{
+		if (!config.notifyPersonalBests() || !pbEnabled() || !clanFilterMatches())
+		{
+			return;
+		}
+
+		final String message = Text.removeTags(rawMessage);
+		final PbBroadcast pb = parsePbBroadcast(message);
+		if (pb == null)
+		{
+			return;
+		}
+
+		final String rsn = localRsn();
+		final boolean localNamed = rsn != null && containsIgnoreCase(pb.names, rsn);
+
+		if (localNamed)
+		{
+			if (recentPbTimes.contains(normalizeTime(pb.time)))
+			{
+				return;
+			}
+			rememberPbTime(pb.time);
+			postPersonalBest(rsn, rsn, pb.time, pb.activity, true);
+		}
+		else
+		{
+			final String author = pb.names.isEmpty() ? "A clan member" : String.join(", ", pb.names);
+			postPersonalBest(null, author, pb.time, pb.activity, false);
 		}
 	}
 
@@ -164,23 +220,101 @@ public class MilestoneNotifier
 
 	private boolean handlePersonalBest(final String message)
 	{
-		final Matcher matcher = PB_PATTERN.matcher(message);
-		if (!matcher.find())
+		final String time = matchNewPbTime(message);
+		if (time == null)
 		{
 			return false;
 		}
 
 		final String rsn = localRsn();
-		final String author = rsn != null ? rsn : "A clan member";
+		rememberPbTime(time);
+		postPersonalBest(rsn, rsn != null ? rsn : "A clan member", time, null, true);
+		return true;
+	}
 
+	static String matchNewPbTime(final String rawMessage)
+	{
+		final Matcher matcher = NEW_PB_PATTERN.matcher(Text.removeTags(rawMessage));
+		return matcher.find() ? matcher.group("time") : null;
+	}
+
+	public static boolean isPersonalBestBroadcast(final String message)
+	{
+		return PB_BROADCAST_PATTERN.matcher(message).find();
+	}
+
+	@Nullable
+	static PbBroadcast parsePbBroadcast(final String message)
+	{
+		final Matcher matcher = PB_BROADCAST_PATTERN.matcher(message);
+		if (!matcher.find())
+		{
+			return null;
+		}
+
+		final List<String> names = new ArrayList<>();
+		for (final String name : matcher.group("names").split(",\\s*|\\s+and\\s+"))
+		{
+			final String trimmed = name.trim();
+			if (!trimmed.isEmpty())
+			{
+				names.add(trimmed);
+			}
+		}
+		return new PbBroadcast(names, matcher.group("activity").trim(), matcher.group("time").trim());
+	}
+
+	private void postPersonalBest(@Nullable final String rsn, final String author, final String time,
+		@Nullable final String activity, final boolean allowScreenshot)
+	{
 		final WebhookPayload payload = WebhookPayload.of(KIND_PB, rsn)
 			.author(author, EmbedStyle.pbIcon())
 			.description(WebhookPayload.bold(author) + " achieved a new personal best!")
 			.color(EmbedStyle.PB)
-			.field("Time", matcher.group("time"), true);
+			.field("Time", time, true);
 
-		post(payload);
-		return true;
+		if (activity != null && !activity.isEmpty())
+		{
+			payload.field("Activity", activity, true);
+		}
+
+		final String webhook = pbWebhook();
+		if (allowScreenshot && config.pbScreenshot())
+		{
+			screenshotUtil.capture(shot ->
+			{
+				payload.image(shot.getFilename());
+				webhookClient.send(webhook, payload, shot);
+			});
+		}
+		else
+		{
+			webhookClient.send(webhook, payload);
+		}
+	}
+
+	private void rememberPbTime(final String time)
+	{
+		recentPbTimes.add(normalizeTime(time));
+		pbDedupTicks = PB_DEDUP_TICKS;
+	}
+
+	private static String normalizeTime(final String time)
+	{
+		final int dot = time.indexOf('.');
+		return dot >= 0 ? time.substring(0, dot) : time;
+	}
+
+	private static boolean containsIgnoreCase(final List<String> names, final String target)
+	{
+		for (final String name : names)
+		{
+			if (name.equalsIgnoreCase(target))
+			{
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private boolean handlePet(final String message)
@@ -376,8 +510,6 @@ public class MilestoneNotifier
 		final Integer previous = lastLevel.get(skill);
 		lastLevel.put(skill, level);
 
-		// First StatChanged for a skill this session establishes the baseline without notifying,
-		// so logging in does not spam a post for every existing level.
 		if (previous == null)
 		{
 			lastXpMilestone.put(skill, xp / XP_MILLION);
@@ -448,12 +580,15 @@ public class MilestoneNotifier
 
 	public void onGameTick()
 	{
+		if (pbDedupTicks > 0 && --pbDedupTicks == 0)
+		{
+			recentPbTimes.clear();
+		}
+
 		if (pendingClueTier.isEmpty())
 		{
 			return;
 		}
-		// The reward widget should load in the same tick as the game message; if two ticks pass
-		// without it, the parse was stale (e.g. a below-threshold clue that never opened a reward).
 		clueBadTicks++;
 		if (clueBadTicks > 1)
 		{
@@ -545,5 +680,19 @@ public class MilestoneNotifier
 	{
 		final String name = skill.getName();
 		return name.substring(0, 1).toUpperCase() + name.substring(1).toLowerCase();
+	}
+
+	static final class PbBroadcast
+	{
+		final List<String> names;
+		final String activity;
+		final String time;
+
+		PbBroadcast(final List<String> names, final String activity, final String time)
+		{
+			this.names = names;
+			this.activity = activity;
+			this.time = time;
+		}
 	}
 }

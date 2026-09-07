@@ -1,6 +1,7 @@
 package cc.clancollective.plugin.milestones;
 
 import cc.clancollective.plugin.domain.LevelNotifyMode;
+import java.util.List;
 import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -30,7 +31,6 @@ public class MilestoneNotifierTest
 		assertTrue(MilestoneNotifier.shouldNotifyLevel(LevelNotifyMode.INTERVAL, 10, 10));
 		assertTrue(MilestoneNotifier.shouldNotifyLevel(LevelNotifyMode.INTERVAL, 10, 50));
 		assertFalse(MilestoneNotifier.shouldNotifyLevel(LevelNotifyMode.INTERVAL, 10, 47));
-		// 99 is not a multiple of 10 but a maxed skill should always post
 		assertTrue(MilestoneNotifier.shouldNotifyLevel(LevelNotifyMode.INTERVAL, 10, 99));
 	}
 
@@ -57,5 +57,45 @@ public class MilestoneNotifierTest
 	{
 		assertNull(MilestoneNotifier.parseQuestTitle(null));
 		assertNull(MilestoneNotifier.parseQuestTitle("You have completed"));
+	}
+
+	@Test
+	public void matchesNewPersonalBestFromFirstPersonMessage()
+	{
+		assertEquals("1:23", MilestoneNotifier.matchNewPbTime(
+			"Fight duration: <col=ff0000>1:23</col> (new personal best)"));
+		assertEquals("0:45", MilestoneNotifier.matchNewPbTime(
+			"Subdued in <col=ff0000>0:45</col> (new personal best)"));
+		assertEquals("22:00", MilestoneNotifier.matchNewPbTime(
+			"<col=ef20ff>Congratulations - your raid is complete!</col><br>Team size: "
+				+ "<col=ff0000>3 players</col> Duration:</col> <col=ff0000>22:00</col> (new personal best)</col>"));
+	}
+
+	@Test
+	public void ignoresNonNewPersonalBestMessages()
+	{
+		assertNull(MilestoneNotifier.matchNewPbTime(
+			"Fight duration: <col=ff0000>1:23</col>. Personal best: 1:20"));
+		assertNull(MilestoneNotifier.matchNewPbTime("You have received a drop."));
+	}
+
+	@Test
+	public void detectsPersonalBestBroadcast()
+	{
+		assertTrue(MilestoneNotifier.isPersonalBestBroadcast(
+			"TMMW, jogrefruitt, Im Her Steve and AER5 achieved a new Tombs of Amascut (team size: 4) "
+				+ "Normal mode Challenge personal best: 22:28"));
+		assertFalse(MilestoneNotifier.isPersonalBestBroadcast("AER5 has joined the clan."));
+	}
+
+	@Test
+	public void parsesTeamPersonalBestBroadcast()
+	{
+		final MilestoneNotifier.PbBroadcast pb = MilestoneNotifier.parsePbBroadcast(
+			"TMMW, jogrefruitt, Im Her Steve and AER5 achieved a new Tombs of Amascut (team size: 4) "
+				+ "Normal mode Challenge personal best: 22:28");
+		assertEquals(List.of("TMMW", "jogrefruitt", "Im Her Steve", "AER5"), pb.names);
+		assertEquals("Tombs of Amascut (team size: 4) Normal mode Challenge", pb.activity);
+		assertEquals("22:28", pb.time);
 	}
 }
