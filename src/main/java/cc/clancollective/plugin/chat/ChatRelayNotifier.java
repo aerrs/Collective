@@ -2,6 +2,7 @@ package cc.clancollective.plugin.chat;
 
 import cc.clancollective.plugin.CollectiveConfig;
 import cc.clancollective.plugin.combat.CombatNotifier;
+import cc.clancollective.plugin.milestones.MilestoneNotifier;
 import cc.clancollective.plugin.net.EmbedStyle;
 import cc.clancollective.plugin.net.WebhookClient;
 import cc.clancollective.plugin.net.WebhookPayload;
@@ -35,9 +36,6 @@ public class ChatRelayNotifier
 		"You are not in a clan chat channel",
 	};
 
-	// Broadcasts that a dedicated milestone feed already handles from the first-person game message.
-	// Relaying them here as well would post the same milestone twice. Kept deliberately narrow so
-	// generic broadcasts (e.g. combat-level or total-level milestones) still relay.
 	private static final String[] MILESTONE_BROADCASTS = {
 		"has completed a combat task",
 		"has a funny feeling",
@@ -62,6 +60,12 @@ public class ChatRelayNotifier
 	{
 		final ClanChannel channel = client.getClanChannel();
 		if (channel == null)
+		{
+			return;
+		}
+
+		final String filter = config.clanFilter().trim();
+		if (!filter.isEmpty() && !filter.equalsIgnoreCase(channel.getName()))
 		{
 			return;
 		}
@@ -147,7 +151,7 @@ public class ChatRelayNotifier
 
 	private static boolean isDedicatedFeed(final String message)
 	{
-		if (CombatNotifier.isPvpBroadcast(message))
+		if (CombatNotifier.isPvpBroadcast(message) || MilestoneNotifier.isPersonalBestBroadcast(message))
 		{
 			return true;
 		}
