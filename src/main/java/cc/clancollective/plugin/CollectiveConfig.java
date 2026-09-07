@@ -139,6 +139,7 @@ public interface CollectiveConfig extends Config
 	@ConfigItem(
 		keyName = "dropsWebhook",
 		name = "Drops webhook URL",
+		secret = true,
 		description = "Discord webhook URL(s) to post drops to. Put one URL per line to post to multiple channels.",
 		section = SECTION_DROPS,
 		position = 0
@@ -146,6 +147,19 @@ public interface CollectiveConfig extends Config
 	default String dropsWebhook()
 	{
 		return "";
+	}
+
+	@ConfigItem(
+		keyName = "notifyDrops",
+		name = "Drops",
+		description = "Post item drops from NPC kills and player kills, including the items and their total value, to the configured Discord webhook.",
+		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
+		section = SECTION_DROPS,
+		position = 1
+	)
+	default boolean notifyDrops()
+	{
+		return false;
 	}
 
 	@Range(min = 0)
@@ -164,7 +178,7 @@ public interface CollectiveConfig extends Config
 	@ConfigItem(
 		keyName = "dropsScreenshot",
 		name = "Include screenshot",
-		description = "Attach a screenshot to drop posts. Chat privacy from the Screenshots section applies.",
+		description = "Attach a screenshot to drop posts. Screenshots may show other players and, unless hidden, chat; the chat privacy setting applies.",
 		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
 		section = SECTION_DROPS,
 		position = 3
@@ -177,6 +191,7 @@ public interface CollectiveConfig extends Config
 	@ConfigItem(
 		keyName = "chatWebhook",
 		name = "Clan chat webhook URL",
+		secret = true,
 		description = "Discord webhook URL(s) to post clan chat to. Put one URL per line to post to multiple channels.",
 		section = SECTION_CHAT,
 		position = 0
@@ -187,9 +202,21 @@ public interface CollectiveConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "clanFilter",
+		name = "Clan name filter",
+		description = "If set, clan chat, clan admin, rank, PvP and personal-best relays only fire for the clan with this exact name. Leave blank to relay for whichever clan you are currently in.",
+		section = SECTION_CHAT,
+		position = 1
+	)
+	default String clanFilter()
+	{
+		return "";
+	}
+
+	@ConfigItem(
 		keyName = "relayMessages",
 		name = "Messages",
-		description = "Relay ordinary clan chat messages, including the sender's RuneScape name, to the configured Discord webhook.",
+		description = "Relay ordinary clan chat messages, including the sender's RuneScape name and clan rank, to the configured Discord webhook.",
 		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
 		section = SECTION_CHAT,
 		position = 2
@@ -215,6 +242,7 @@ public interface CollectiveConfig extends Config
 	@ConfigItem(
 		keyName = "clanAdminWebhook",
 		name = "Clan admin webhook URL",
+		secret = true,
 		description = "Discord webhook URL(s) to post clan admin events to. Put one URL per line to post to multiple channels.",
 		section = SECTION_CLAN_ADMIN,
 		position = 0
@@ -292,6 +320,7 @@ public interface CollectiveConfig extends Config
 	@ConfigItem(
 		keyName = "milestonesWebhook",
 		name = "Milestones webhook URL",
+		secret = true,
 		description = "Discord webhook URL(s) to post milestones to. Put one URL per line to post to multiple channels.",
 		section = SECTION_MILESTONES,
 		position = 0
@@ -304,7 +333,7 @@ public interface CollectiveConfig extends Config
 	@ConfigItem(
 		keyName = "milestonesScreenshot",
 		name = "Include screenshot",
-		description = "Attach a screenshot to milestone posts. Chat privacy from the Screenshots section applies.",
+		description = "Attach a screenshot to milestone posts. Screenshots may show other players and, unless hidden, chat; the chat privacy setting applies.",
 		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
 		section = SECTION_MILESTONES,
 		position = 1
@@ -468,8 +497,35 @@ public interface CollectiveConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "pbWebhook",
+		name = "Personal best webhook URL",
+		secret = true,
+		description = "Discord webhook URL(s) to post personal bests to. Put one URL per line to post to multiple channels. Falls back to the milestones webhook if left blank.",
+		section = SECTION_MILESTONES,
+		position = 14
+	)
+	default String pbWebhook()
+	{
+		return "";
+	}
+
+	@ConfigItem(
+		keyName = "pbScreenshot",
+		name = "Personal best screenshot",
+		description = "Attach a screenshot to your own personal-best posts. Screenshots may show other players and, unless hidden, chat; the chat privacy setting applies.",
+		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
+		section = SECTION_MILESTONES,
+		position = 15
+	)
+	default boolean pbScreenshot()
+	{
+		return false;
+	}
+
+	@ConfigItem(
 		keyName = "combatWebhook",
 		name = "Combat webhook URL",
+		secret = true,
 		description = "Discord webhook URL(s) to post combat events to. Put one URL per line to post to multiple channels.",
 		section = SECTION_COMBAT,
 		position = 0
@@ -482,7 +538,7 @@ public interface CollectiveConfig extends Config
 	@ConfigItem(
 		keyName = "combatScreenshot",
 		name = "Include screenshot",
-		description = "Attach a screenshot to combat posts. Chat privacy from the Screenshots section applies.",
+		description = "Attach a screenshot to combat posts. Screenshots may show other players and, unless hidden, chat; the chat privacy setting applies.",
 		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
 		section = SECTION_COMBAT,
 		position = 1
