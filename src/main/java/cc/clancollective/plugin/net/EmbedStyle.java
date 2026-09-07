@@ -100,7 +100,9 @@ public final class EmbedStyle
 		{
 			return null;
 		}
-		final String name = rankTitle.trim().replace(' ', '_');
+		final String trimmed = rankTitle.trim();
+		final String sentence = trimmed.substring(0, 1).toUpperCase() + trimmed.substring(1).toLowerCase();
+		final String name = sentence.replace(' ', '_');
 		return wikiSprite("Clan_icon_-_" + name + ".png");
 	}
 }

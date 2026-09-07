@@ -147,13 +147,12 @@ public class CollectivePanel extends PluginPanel
 		feedsBody.removeAll();
 
 		int shown = 0;
-
-		if (!config.dropsWebhook().trim().isEmpty())
-		{
-			feedsBody.add(feedRow("Drops", firstHealth(config.dropsWebhook())));
-			feedsBody.add(javax.swing.Box.createVerticalStrut(PanelConstants.ROW_GAP));
-			shown++;
-		}
+		shown += addFeedRow("Drops", config.dropsWebhook());
+		shown += addFeedRow("Clan chat", config.chatWebhook());
+		shown += addFeedRow("Clan admin", config.clanAdminWebhook());
+		shown += addFeedRow("Milestones", config.milestonesWebhook());
+		shown += addFeedRow("Personal bests", config.pbWebhook());
+		shown += addFeedRow("Combat", config.combatWebhook());
 
 		if (shown == 0)
 		{
@@ -167,6 +166,17 @@ public class CollectivePanel extends PluginPanel
 
 		feedsBody.revalidate();
 		feedsBody.repaint();
+	}
+
+	private int addFeedRow(final String name, final String webhookValue)
+	{
+		if (webhookValue.trim().isEmpty())
+		{
+			return 0;
+		}
+		feedsBody.add(feedRow(name, firstHealth(webhookValue)));
+		feedsBody.add(javax.swing.Box.createVerticalStrut(PanelConstants.ROW_GAP));
+		return 1;
 	}
 
 	private cc.clancollective.plugin.net.WebhookHealth firstHealth(final String webhookValue)
@@ -201,6 +211,11 @@ public class CollectivePanel extends PluginPanel
 		SwingUtilities.invokeLater(this::refreshFeeds);
 	}
 
+	public void refreshFeedHealth()
+	{
+		SwingUtilities.invokeLater(this::refreshFeeds);
+	}
+
 	private JPanel buildEventsSection()
 	{
 		final JPanel body = new JPanel();
@@ -216,22 +231,20 @@ public class CollectivePanel extends PluginPanel
 		eventToggle = flatButton(PanelConstants.EVENT_START);
 		CollectiveSwing.onClick(eventToggle, this::onToggleEvent);
 
-		final JPanel controls = new JPanel(new GridLayout(1, 2, PanelConstants.ROW_GAP, 0));
-		controls.setBackground(PanelConstants.BG);
-		controls.setAlignmentX(Component.LEFT_ALIGNMENT);
-
 		eventCopy = flatButton(PanelConstants.EVENT_COPY);
 		CollectiveSwing.onClick(eventCopy, this::onCopyEvent);
 
 		eventReset = flatButton(PanelConstants.EVENT_RESET);
 		CollectiveSwing.onClick(eventReset, this::onResetEvent);
 
+		final JPanel controls = new JPanel(new GridLayout(1, 3, PanelConstants.ROW_GAP, 0));
+		controls.setBackground(PanelConstants.BG);
+		controls.setAlignmentX(Component.LEFT_ALIGNMENT);
+		controls.add(eventToggle);
 		controls.add(eventCopy);
 		controls.add(eventReset);
 
 		body.add(eventStatus);
-		body.add(javax.swing.Box.createVerticalStrut(PanelConstants.ROW_GAP));
-		body.add(eventToggle);
 		body.add(javax.swing.Box.createVerticalStrut(PanelConstants.ROW_GAP));
 		body.add(controls);
 

@@ -54,7 +54,7 @@ public final class PanelConstants
 	public static final String SECTION_EVENTS = "Events";
 	public static final String SECTION_SETUP = "Setup";
 
-	public static final String EVENT_START = "Start event";
+	public static final String EVENT_START = "Start";
 	public static final String EVENT_STOP = "Stop";
 	public static final String EVENT_COPY = "Copy";
 	public static final String EVENT_RESET = "Reset";
@@ -63,8 +63,8 @@ public final class PanelConstants
 	public static final String EVENT_NO_NAMES = "No clanmates recorded yet.";
 
 	public static final String SETUP_PLACEHOLDER =
-		"Paste your clan's Discord webhook URLs in the plugin settings to start posting. "
-			+ "Per-feature setup lands here in a future update.";
+		"Add your clan's Discord webhook URLs in the plugin settings, then enable the feeds you want. "
+			+ "Drops, clan chat, clan admin, milestones and combat each post to their own webhook.";
 
 	public static final String NO_FEEDS_TEXT =
 		"No webhooks configured yet. Add one in the plugin settings to see its status here.";
