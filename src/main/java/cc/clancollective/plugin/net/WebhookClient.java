@@ -2,16 +2,19 @@ package cc.clancollective.plugin.net;
 
 import cc.clancollective.plugin.CollectiveConfig;
 import cc.clancollective.plugin.util.Screenshot;
+import com.google.gson.Gson;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nullable;
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -34,6 +37,8 @@ public class WebhookClient
 	private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
 	private static final String USER_AGENT = "Collective RuneLite Plugin";
 	private static final int MAX_BACKOFF_SHIFT = 16;
+	private static final int MAX_IN_FLIGHT = 250;
+	private static final long MAX_RETRY_AFTER_MS = 300_000L;
 
 	private static final Set<String> DISCORD_HOSTS = Set.of(
 		"discord.com", "discordapp.com",
@@ -42,17 +47,21 @@ public class WebhookClient
 	private final OkHttpClient httpClient;
 	private final CollectiveConfig config;
 	private final ScheduledExecutorService executor;
+	private final Gson gson;
 
 	private final Map<String, WebhookHealth> health = new ConcurrentHashMap<>();
 	private final List<Runnable> healthListeners = new ArrayList<>();
 	private final Set<ScheduledFuture<?>> pendingRetries = ConcurrentHashMap.newKeySet();
+	private final AtomicInteger inFlight = new AtomicInteger();
+	private volatile boolean shuttingDown;
 
 	@Inject
 	public WebhookClient(final OkHttpClient runeliteClient, final CollectiveConfig config,
-		final ScheduledExecutorService executor)
+		final ScheduledExecutorService executor, final Gson gson)
 	{
 		this.config = config;
 		this.executor = executor;
+		this.gson = gson;
 		this.httpClient = runeliteClient.newBuilder()
 			.followRedirects(false)
 			.followSslRedirects(false)
@@ -93,7 +102,7 @@ public class WebhookClient
 			return;
 		}
 
-		final String json = payload.toJson();
+		final String json = payload.toJson(gson);
 		RequestBody imageBody = null;
 		String imageName = null;
 		if (screenshot != null)
@@ -107,6 +116,13 @@ public class WebhookClient
 
 		for (final HttpUrl url : urls)
 		{
+			if (inFlight.getAndIncrement() >= MAX_IN_FLIGHT)
+			{
+				inFlight.decrementAndGet();
+				log.warn("Collective: webhook delivery queue full ({}); dropping event to {}",
+					MAX_IN_FLIGHT, censor(url));
+				continue;
+			}
 			markUnknownIfAbsent(url);
 			executor.execute(() -> dispatch(url, json, screenshotName, image, 0));
 		}
@@ -139,7 +155,6 @@ public class WebhookClient
 			@Override
 			public void onFailure(final Call call, final IOException e)
 			{
-				// Connection resets, timeouts and other transport errors are transient: retry.
 				retryOrDrop(url, json, screenshotName, image, attempt, e.getMessage(), 0L, true);
 			}
 
@@ -151,6 +166,7 @@ public class WebhookClient
 					final int code = r.code();
 					if (r.isSuccessful())
 					{
+						inFlight.decrementAndGet();
 						updateHealth(url, health(url).withSuccess());
 						return;
 					}
@@ -159,20 +175,15 @@ public class WebhookClient
 					final boolean retryable;
 					if (code == 429)
 					{
-						// Rate limited: honour Retry-After and try again.
 						retryAfterMs = parseRetryAfter(r);
 						retryable = true;
 					}
 					else if (code >= 500)
 					{
-						// Server-side failure: transient, retry.
 						retryable = true;
 					}
 					else
 					{
-						// Other 4xx (400/401/403/404/405/...) are permanent for an
-						// unchanged request — a revoked or malformed webhook will never
-						// succeed, so drop immediately instead of burning retries.
 						retryable = false;
 					}
 
@@ -203,6 +214,7 @@ public class WebhookClient
 		}
 		else
 		{
+			inFlight.decrementAndGet();
 			updateHealth(url, health(url).withError(error));
 			if (!retryable)
 			{
@@ -220,8 +232,12 @@ public class WebhookClient
 	private void scheduleRetry(final HttpUrl url, final String json, @Nullable final String screenshotName,
 		@Nullable final RequestBody image, final int attempt, final long delay)
 	{
-		// Track the future so shutDown() can cancel retries that haven't fired yet;
-		// the task removes its own handle once it starts running.
+		if (shuttingDown)
+		{
+			inFlight.decrementAndGet();
+			return;
+		}
+
 		final ScheduledFuture<?>[] holder = new ScheduledFuture<?>[1];
 		final ScheduledFuture<?> future = executor.schedule(() ->
 		{
@@ -232,23 +248,21 @@ public class WebhookClient
 		holder[0] = future;
 		pendingRetries.add(future);
 
-		// If the executor ran the task before we registered it, drop the stale handle.
 		if (future.isDone())
 		{
 			pendingRetries.remove(future);
 		}
 	}
 
-	/**
-	 * Cancels any retry deliveries that are scheduled but have not yet run. Called from the
-	 * plugin's shutDown() so that disabling the plugin does not leave webhook posts firing
-	 * afterwards. The executor itself is owned by RuneLite and is intentionally left alone.
-	 */
 	public void cancelPendingRetries()
 	{
+		shuttingDown = true;
 		for (final ScheduledFuture<?> future : pendingRetries)
 		{
-			future.cancel(false);
+			if (future.cancel(false))
+			{
+				inFlight.decrementAndGet();
+			}
 		}
 		pendingRetries.clear();
 	}
@@ -260,7 +274,12 @@ public class WebhookClient
 		{
 			try
 			{
-				return (long) (Double.parseDouble(header.trim()) * 1000.0);
+				final double seconds = Double.parseDouble(header.trim());
+				if (Double.isNaN(seconds) || seconds <= 0)
+				{
+					return 0L;
+				}
+				return Math.min((long) (seconds * 1000.0), MAX_RETRY_AFTER_MS);
 			}
 			catch (NumberFormatException ignored)
 			{
@@ -341,7 +360,6 @@ public class WebhookClient
 			final HttpUrl url = HttpUrl.parse(trimmed);
 			if (isValidDiscordWebhook(url))
 			{
-				// Skip duplicate destinations so a URL pasted twice posts only once.
 				if (seen.add(url.toString()))
 				{
 					out.add(url);
@@ -365,17 +383,21 @@ public class WebhookClient
 		{
 			return false;
 		}
-		if (!DISCORD_HOSTS.contains(url.host().toLowerCase()))
+		if (!DISCORD_HOSTS.contains(url.host().toLowerCase(Locale.ROOT)))
 		{
 			return false;
 		}
 		final List<String> segments = url.pathSegments();
-		if (segments.size() < 4)
+		final int n = segments.size();
+		if (n != 4 && n != 5)
 		{
 			return false;
 		}
-		final int n = segments.size();
-		if (!"api".equals(segments.get(n - 4)) || !"webhooks".equals(segments.get(n - 3)))
+		if (!"api".equals(segments.get(0)) || !"webhooks".equals(segments.get(n - 3)))
+		{
+			return false;
+		}
+		if (n == 5 && !segments.get(1).matches("v\\d+"))
 		{
 			return false;
 		}

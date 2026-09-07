@@ -11,12 +11,6 @@ import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-/**
- * Locks in the cancellation contract that {@link WebhookClient#cancelPendingRetries()} relies on:
- * retry deliveries are scheduled on an injected {@link ScheduledExecutorService} and tracked as
- * {@link ScheduledFuture}s so that, when the plugin shuts down, pending retries can be cancelled
- * before they fire. The executor itself is owned by RuneLite and is not shut down here.
- */
 public class WebhookShutdownTest
 {
 	@Test
@@ -28,21 +22,20 @@ public class WebhookShutdownTest
 			final Set<ScheduledFuture<?>> pending = ConcurrentHashMap.newKeySet();
 			final AtomicInteger ran = new AtomicInteger();
 
-			// Schedule several "retries" far enough out that cancellation wins the race.
 			for (int i = 0; i < 5; i++)
 			{
-				pending.add(executor.schedule(ran::incrementAndGet, 500, TimeUnit.MILLISECONDS));
+				pending.add(executor.schedule(ran::incrementAndGet, 200, TimeUnit.MILLISECONDS));
 			}
 
-			// Mirror cancelPendingRetries(): cancel every tracked future, then clear.
 			for (final ScheduledFuture<?> f : pending)
 			{
-				f.cancel(false);
+				assertTrue(f.cancel(false));
 			}
 			pending.clear();
 
-			// Give the executor well past the original delay; nothing should have run.
-			Thread.sleep(800);
+			final ScheduledFuture<?> barrier = executor.schedule(() -> { }, 200, TimeUnit.MILLISECONDS);
+			barrier.get(2, TimeUnit.SECONDS);
+
 			assertEquals(0, ran.get());
 			assertTrue(pending.isEmpty());
 		}
@@ -59,8 +52,7 @@ public class WebhookShutdownTest
 		try
 		{
 			final ScheduledFuture<?> f = executor.schedule(() -> { }, 0, TimeUnit.MILLISECONDS);
-			f.get(1, TimeUnit.SECONDS); // ensure it has completed
-			// Cancelling a completed future is a no-op and must not throw.
+			f.get(1, TimeUnit.SECONDS);
 			f.cancel(false);
 		}
 		finally

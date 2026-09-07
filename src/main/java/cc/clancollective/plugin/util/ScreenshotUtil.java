@@ -33,15 +33,6 @@ public class ScreenshotUtil
 	private static final int MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 	private static final int MIN_JPEG_DIMENSION = 16;
 
-	static
-	{
-		// Never let ImageIO fall back to a temp-file-backed cache stream. On large frames
-		// the FileCacheImageOutputStream path throws during close (StreamCloser
-		// IndexOutOfBoundsException / EOFException); forcing in-memory caching keeps all
-		// encoding self-contained and deterministic.
-		ImageIO.setUseCache(false);
-	}
-
 	private final Client client;
 	private final ClientThread clientThread;
 	private final DrawManager drawManager;
@@ -73,9 +64,6 @@ public class ScreenshotUtil
 
 			drawManager.requestNextFrameListener(frame ->
 			{
-				// Grab the raw pixels, then restore the chat widgets immediately so they are
-				// hidden for the shortest possible window. Encoding (which can be slow for
-				// large frames) happens afterwards, once chat is already visible again.
 				BufferedImage image = null;
 				try
 				{
@@ -164,10 +152,6 @@ public class ScreenshotUtil
 			return new Screenshot("collective.png", "image/png", png);
 		}
 
-		// PNG is over the ceiling. Fall back to JPEG, but do not trust a single scale
-		// pass: JPEG size is not proportional to pixel count, so a computed factor can
-		// still overshoot. Reduce quality first, then dimensions, until the encoded
-		// bytes are actually within MAX_IMAGE_BYTES.
 		BufferedImage rgb = toRgb(image);
 		final byte[] jpeg = encodeJpegUnderCeiling(rgb);
 		return new Screenshot("collective.jpg", "image/jpeg", jpeg);
@@ -178,10 +162,8 @@ public class ScreenshotUtil
 		float quality = 0.9f;
 		byte[] best = null;
 
-		// Up to a bounded number of shrink passes so this always terminates.
 		for (int pass = 0; pass < 12; pass++)
 		{
-			// Try progressively lower JPEG quality at the current dimensions.
 			for (float q = quality; q >= 0.3f; q -= 0.2f)
 			{
 				final byte[] bytes = toJpeg(rgb, q);
@@ -192,15 +174,10 @@ public class ScreenshotUtil
 				}
 			}
 
-			// Still too big at the lowest quality for these dimensions: halve the
-			// linear size (quarter the pixels) and try again. Stop at a sane floor
-			// rather than shrinking toward 1px, which produces degenerate images.
 			final int nextW = rgb.getWidth() / 2;
 			final int nextH = rgb.getHeight() / 2;
 			if (nextW < MIN_JPEG_DIMENSION || nextH < MIN_JPEG_DIMENSION)
 			{
-				// Cannot shrink further without going below the floor; return the
-				// smallest encoding we produced.
 				break;
 			}
 			rgb = toRgb(rescale(rgb, 0.5));
@@ -238,10 +215,6 @@ public class ScreenshotUtil
 		}
 		final ImageWriter writer = writers.next();
 		final ByteArrayOutputStream out = new ByteArrayOutputStream();
-		// Use an explicit in-memory cache stream rather than ImageIO.createImageOutputStream,
-		// which may fall back to a temp-file-backed FileCacheImageOutputStream. That disk path
-		// is what produced the StreamCloser IndexOutOfBoundsException / EOFException on large
-		// frames. Keeping everything in memory makes encoding deterministic and self-contained.
 		final MemoryCacheImageOutputStream ios = new MemoryCacheImageOutputStream(out);
 		try
 		{
@@ -257,7 +230,6 @@ public class ScreenshotUtil
 		}
 		finally
 		{
-			// Detach the image from the writer before disposing, then close our own stream.
 			writer.setOutput(null);
 			writer.dispose();
 			ios.close();

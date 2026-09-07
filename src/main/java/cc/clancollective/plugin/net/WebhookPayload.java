@@ -18,8 +18,6 @@ public final class WebhookPayload
 	private static final int MAX_FIELD_VALUE = 1024;
 	private static final int MAX_FIELDS = 25;
 
-	private static final Gson GSON = new Gson();
-
 	private final String kind;
 	private final String rsn;
 
@@ -101,7 +99,7 @@ public final class WebhookPayload
 		return kind;
 	}
 
-	public String toJson()
+	public String toJson(final Gson gson)
 	{
 		final JsonObject embed = new JsonObject();
 
@@ -164,7 +162,7 @@ public final class WebhookPayload
 
 		final JsonObject body = new JsonObject();
 		body.add("embeds", embeds);
-		return GSON.toJson(body);
+		return gson.toJson(body);
 	}
 
 	public static String bold(final String text)

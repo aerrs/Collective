@@ -1,5 +1,6 @@
 package cc.clancollective.plugin.net;
 
+import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import java.awt.Color;
@@ -12,7 +13,7 @@ public class WebhookPayloadTest
 {
 	private static JsonObject embedOf(final WebhookPayload payload)
 	{
-		final JsonObject root = new JsonParser().parse(payload.toJson()).getAsJsonObject();
+		final JsonObject root = new JsonParser().parse(payload.toJson(new Gson())).getAsJsonObject();
 		return root.getAsJsonArray("embeds").get(0).getAsJsonObject();
 	}
 

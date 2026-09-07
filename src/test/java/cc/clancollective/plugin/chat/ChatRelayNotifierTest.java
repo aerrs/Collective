@@ -3,6 +3,7 @@ package cc.clancollective.plugin.chat;
 import cc.clancollective.plugin.CollectiveConfig;
 import cc.clancollective.plugin.net.WebhookClient;
 import cc.clancollective.plugin.net.WebhookPayload;
+import com.google.gson.Gson;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.clan.ClanChannel;
@@ -37,6 +38,7 @@ public class ChatRelayNotifierTest
 
 		when(config.chatWebhook()).thenReturn(CHAT_WEBHOOK);
 		when(config.clanAdminWebhook()).thenReturn(ADMIN_WEBHOOK);
+		when(config.clanFilter()).thenReturn("");
 		when(config.relayMessages()).thenReturn(true);
 		when(config.relayBroadcasts()).thenReturn(true);
 		when(config.relayApplications()).thenReturn(true);
@@ -185,7 +187,7 @@ public class ChatRelayNotifierTest
 
 		final ArgumentCaptor<WebhookPayload> captor = ArgumentCaptor.forClass(WebhookPayload.class);
 		verify(webhookClient).send(eq(CHAT_WEBHOOK), captor.capture());
-		final String json = captor.getValue().toJson();
+		final String json = captor.getValue().toJson(new Gson());
 		if (json.contains("CA_ID:"))
 		{
 			throw new AssertionError("CA_ID prefix leaked into broadcast payload: " + json);

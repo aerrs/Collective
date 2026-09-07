@@ -70,7 +70,7 @@ public class DropNotifier
 
 	private boolean enabled()
 	{
-		return !config.dropsWebhook().trim().isEmpty();
+		return config.notifyDrops() && !config.dropsWebhook().trim().isEmpty();
 	}
 
 	private void process(final String source, final Collection<ItemStack> items)
@@ -86,9 +86,6 @@ public class DropNotifier
 		long topValue = -1;
 		for (final ItemStack stack : items)
 		{
-			// Value (and therefore the minimum-value threshold) is derived from RuneLite's
-			// current item price source via ItemManager, not the GE/wiki directly, so the
-			// figure tracks whatever RuneLite reports at drop time.
 			final int price = itemManager.getItemPrice(stack.getId());
 			final long value = (long) price * stack.getQuantity();
 			total += value;

@@ -42,6 +42,7 @@ public class DropNotifierTest
 
 		notifier = new DropNotifier(client, config, itemManager, webhookClient, mock(cc.clancollective.plugin.util.ScreenshotUtil.class));
 
+		when(config.notifyDrops()).thenReturn(true);
 		when(config.dropsWebhook()).thenReturn("https://discord.com/api/webhooks/1/tok");
 		when(config.dropsScreenshot()).thenReturn(false);
 
