@@ -75,19 +75,4 @@ public final class CollectiveSwing
 			}
 		});
 	}
-
-	public static Color statusColor(final cc.clancollective.plugin.net.WebhookHealth.State state)
-	{
-		switch (state)
-		{
-			case OK:
-				return PanelConstants.STATUS_OK;
-			case WARN:
-				return PanelConstants.STATUS_WARN;
-			case ERROR:
-				return PanelConstants.STATUS_ERROR;
-			default:
-				return PanelConstants.STATUS_UNKNOWN;
-		}
-	}
 }

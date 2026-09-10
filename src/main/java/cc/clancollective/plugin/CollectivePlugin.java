@@ -24,7 +24,6 @@ import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.PlayerSpawned;
 import net.runelite.client.config.ConfigManager;
-import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
@@ -81,7 +80,7 @@ public class CollectivePlugin extends Plugin
 	@Override
 	protected void startUp() throws Exception
 	{
-		panel = new CollectivePanel(config, configManager, webhookClient, eventRecorder, clanDirectoryService);
+		panel = new CollectivePanel(config, configManager, eventRecorder, clanDirectoryService);
 
 		final NavigationButton.NavigationButtonBuilder builder = NavigationButton.builder()
 			.tooltip(PanelConstants.NAV_TOOLTIP)
@@ -96,7 +95,6 @@ public class CollectivePlugin extends Plugin
 		navButton = builder.build();
 
 		clientToolbar.addNavigation(navButton);
-		panel.onActivate();
 
 		log.debug("Collective started");
 	}
@@ -106,10 +104,6 @@ public class CollectivePlugin extends Plugin
 	{
 		webhookClient.cancelPendingRetries();
 
-		if (panel != null)
-		{
-			panel.onDeactivate();
-		}
 		if (navButton != null)
 		{
 			clientToolbar.removeNavigation(navButton);
@@ -238,20 +232,6 @@ public class CollectivePlugin extends Plugin
 		else
 		{
 			current.setClanStatsVisible(false);
-		}
-	}
-
-	@Subscribe
-	public void onConfigChanged(final ConfigChanged event)
-	{
-		if (!CollectiveConfig.GROUP.equals(event.getGroup()))
-		{
-			return;
-		}
-		final CollectivePanel current = panel;
-		if (current != null)
-		{
-			current.refreshFeedHealth();
 		}
 	}
 
