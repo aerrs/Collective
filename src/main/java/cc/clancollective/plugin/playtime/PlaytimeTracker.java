@@ -3,7 +3,15 @@ package cc.clancollective.plugin.playtime;
 import cc.clancollective.plugin.CollectiveConfig;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonSyntaxException;
+import com.google.gson.reflect.TypeToken;
 import java.io.IOException;
+import java.lang.reflect.Type;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.extern.slf4j.Slf4j;
@@ -41,13 +49,12 @@ public class PlaytimeTracker
 	private final Gson gson;
 
 	private long lastAccrualMs = -1;
-	private long carryMs;
-	private long pendingSeconds;
 	private long lastFlushMs;
 	private long lastPersistMs;
-	private String lastClan;
-	private String lastRsn;
 	private boolean inFlight;
+	private Bucket flushing;
+
+	private final Map<Bucket, Accum> buckets = new LinkedHashMap<>();
 
 	@Inject
 	public PlaytimeTracker(final Client client, final CollectiveConfig config,
@@ -58,7 +65,7 @@ public class PlaytimeTracker
 		this.configManager = configManager;
 		this.httpClient = runeliteClient;
 		this.gson = gson;
-		this.pendingSeconds = loadPending();
+		loadPending();
 	}
 
 	public void onLogin()
@@ -126,7 +133,7 @@ public class PlaytimeTracker
 			return;
 		}
 
-		recordElapsed(delta, clan, rsn);
+		recordElapsed(delta, clan, rsn, client.getAccountHash());
 
 		if (now - lastPersistMs >= PERSIST_INTERVAL_MS)
 		{
@@ -134,26 +141,29 @@ public class PlaytimeTracker
 		}
 	}
 
-	synchronized void recordElapsed(final long deltaMs, final String clan, final String rsn)
+	synchronized void recordElapsed(final long deltaMs, final String clan, final String rsn, final long accountHash)
 	{
-		carryMs += deltaMs;
-		final long whole = carryMs / 1000L;
+		final Bucket bucket = new Bucket(clan, rsn);
+		final Accum accum = buckets.computeIfAbsent(bucket, b -> new Accum());
+		accum.carryMs += deltaMs;
+		final long whole = accum.carryMs / 1000L;
 		if (whole > 0)
 		{
-			pendingSeconds += whole;
-			carryMs -= whole * 1000L;
+			accum.seconds += whole;
+			accum.carryMs -= whole * 1000L;
 		}
-		lastClan = clan;
-		lastRsn = rsn;
+		accum.accountHash = accountHash;
 	}
 
 	private void maybeFlush(final boolean force)
 	{
 		final long now = System.currentTimeMillis();
+		final Bucket target;
 		final int toSend;
+		final long accountHash;
 		synchronized (this)
 		{
-			if (inFlight || pendingSeconds <= 0 || lastRsn == null || lastClan == null)
+			if (inFlight)
 			{
 				return;
 			}
@@ -165,19 +175,38 @@ public class PlaytimeTracker
 			{
 				return;
 			}
+			target = firstPending();
+			if (target == null)
+			{
+				return;
+			}
 			lastFlushMs = now;
-			toSend = (int) Math.min(pendingSeconds, Integer.MAX_VALUE);
+			toSend = (int) Math.min(buckets.get(target).seconds, Integer.MAX_VALUE);
+			accountHash = buckets.get(target).accountHash;
+			flushing = target;
 			inFlight = true;
 		}
-		post(lastClan, lastRsn, toSend);
+		post(target, accountHash, toSend);
 	}
 
-	private void post(final String clan, final String rsn, final int seconds)
+	private synchronized Bucket firstPending()
+	{
+		for (final Map.Entry<Bucket, Accum> entry : buckets.entrySet())
+		{
+			if (entry.getValue().seconds > 0)
+			{
+				return entry.getKey();
+			}
+		}
+		return null;
+	}
+
+	private void post(final Bucket bucket, final long accountHash, final int seconds)
 	{
 		final HttpUrl base = HttpUrl.parse(config.playtimeBackendUrl().trim());
 		if (base == null)
 		{
-			onSendResult(false, seconds);
+			onSendResult(false, bucket, seconds);
 			return;
 		}
 		final HttpUrl url = base.newBuilder().addPathSegments("api/clan/playtime/heartbeat").build();
@@ -188,8 +217,9 @@ public class PlaytimeTracker
 		{
 			body.addProperty("slug", slug);
 		}
-		body.addProperty("cc", clan);
-		body.addProperty("rsn", rsn);
+		body.addProperty("cc", bucket.clan);
+		body.addProperty("rsn", bucket.rsn);
+		body.addProperty("accountHash", accountHash);
 		body.addProperty("seconds", seconds);
 		body.addProperty("token", config.playtimeToken().trim());
 
@@ -205,7 +235,7 @@ public class PlaytimeTracker
 			public void onFailure(final Call call, final IOException e)
 			{
 				log.debug("Collective: playtime heartbeat failed", e);
-				onSendResult(false, seconds);
+				onSendResult(false, bucket, seconds);
 			}
 
 			@Override
@@ -213,19 +243,28 @@ public class PlaytimeTracker
 			{
 				try (Response r = response)
 				{
-					onSendResult(r.isSuccessful(), seconds);
+					onSendResult(r.isSuccessful(), bucket, seconds);
 				}
 			}
 		});
 	}
 
-	synchronized void onSendResult(final boolean ok, final int sent)
+	synchronized void onSendResult(final boolean ok, final Bucket bucket, final int sent)
 	{
 		if (ok)
 		{
-			pendingSeconds = Math.max(0, pendingSeconds - sent);
+			final Accum accum = buckets.get(bucket);
+			if (accum != null)
+			{
+				accum.seconds = Math.max(0, accum.seconds - sent);
+				if (accum.seconds == 0 && accum.carryMs == 0)
+				{
+					buckets.remove(bucket);
+				}
+			}
 			persist();
 		}
+		flushing = null;
 		inFlight = false;
 	}
 
@@ -247,31 +286,125 @@ public class PlaytimeTracker
 		return local != null && local.getName() != null ? Text.toJagexName(local.getName()) : null;
 	}
 
-	private long loadPending()
+	private synchronized void loadPending()
 	{
+		final String raw = configManager.getConfiguration(CollectiveConfig.GROUP, UNSENT_KEY);
+		if (raw == null || raw.trim().isEmpty())
+		{
+			return;
+		}
 		try
 		{
-			final String raw = configManager.getConfiguration(CollectiveConfig.GROUP, UNSENT_KEY);
-			if (raw != null && !raw.isEmpty())
+			final Type type = new TypeToken<List<StoredBucket>>()
 			{
-				return Math.max(0, Long.parseLong(raw.trim()));
+			}.getType();
+			final List<StoredBucket> stored = gson.fromJson(raw, type);
+			if (stored == null)
+			{
+				return;
+			}
+			for (final StoredBucket sb : stored)
+			{
+				if (sb == null || sb.clan == null || sb.rsn == null || sb.seconds <= 0)
+				{
+					continue;
+				}
+				final Accum accum = new Accum();
+				accum.seconds = sb.seconds;
+				accum.accountHash = sb.accountHash;
+				buckets.put(new Bucket(sb.clan, sb.rsn), accum);
 			}
 		}
-		catch (NumberFormatException e)
+		catch (JsonSyntaxException e)
 		{
 			log.debug("Collective: bad stored playtime value", e);
 		}
-		return 0;
 	}
 
 	private synchronized void persist()
 	{
 		lastPersistMs = System.currentTimeMillis();
-		configManager.setConfiguration(CollectiveConfig.GROUP, UNSENT_KEY, Long.toString(pendingSeconds));
+		final List<StoredBucket> stored = new ArrayList<>();
+		for (final Map.Entry<Bucket, Accum> entry : buckets.entrySet())
+		{
+			if (entry.getValue().seconds > 0)
+			{
+				stored.add(new StoredBucket(entry.getKey().clan, entry.getKey().rsn,
+					entry.getValue().seconds, entry.getValue().accountHash));
+			}
+		}
+		configManager.setConfiguration(CollectiveConfig.GROUP, UNSENT_KEY, gson.toJson(stored));
 	}
 
 	synchronized long pendingSeconds()
 	{
-		return pendingSeconds;
+		long total = 0;
+		for (final Accum accum : buckets.values())
+		{
+			total += accum.seconds;
+		}
+		return total;
+	}
+
+	synchronized long pendingSeconds(final String clan, final String rsn)
+	{
+		final Accum accum = buckets.get(new Bucket(clan, rsn));
+		return accum != null ? accum.seconds : 0;
+	}
+
+	static final class Bucket
+	{
+		private final String clan;
+		private final String rsn;
+
+		Bucket(final String clan, final String rsn)
+		{
+			this.clan = clan;
+			this.rsn = rsn;
+		}
+
+		@Override
+		public boolean equals(final Object o)
+		{
+			if (this == o)
+			{
+				return true;
+			}
+			if (!(o instanceof Bucket))
+			{
+				return false;
+			}
+			final Bucket other = (Bucket) o;
+			return Objects.equals(clan, other.clan) && Objects.equals(rsn, other.rsn);
+		}
+
+		@Override
+		public int hashCode()
+		{
+			return Objects.hash(clan, rsn);
+		}
+	}
+
+	private static final class Accum
+	{
+		private long carryMs;
+		private long seconds;
+		private long accountHash;
+	}
+
+	private static final class StoredBucket
+	{
+		private final String clan;
+		private final String rsn;
+		private final long seconds;
+		private final long accountHash;
+
+		private StoredBucket(final String clan, final String rsn, final long seconds, final long accountHash)
+		{
+			this.clan = clan;
+			this.rsn = rsn;
+			this.seconds = seconds;
+			this.accountHash = accountHash;
+		}
 	}
 }
