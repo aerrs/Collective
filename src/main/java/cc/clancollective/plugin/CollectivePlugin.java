@@ -17,6 +17,7 @@ import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
+import net.runelite.api.Player;
 import net.runelite.api.clan.ClanChannel;
 import net.runelite.api.events.ClanChannelChanged;
 import net.runelite.api.events.ChatMessage;
@@ -31,6 +32,7 @@ import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.NavigationButton;
 import net.runelite.client.util.ImageUtil;
+import net.runelite.client.util.Text;
 
 @Slf4j
 @PluginDescriptor(
@@ -45,6 +47,9 @@ public class CollectivePlugin extends Plugin
 
 	@Inject
 	private CollectiveConfig config;
+
+	@Inject
+	private ConfigManager configManager;
 
 	@Inject
 	private ClientToolbar clientToolbar;
@@ -80,7 +85,7 @@ public class CollectivePlugin extends Plugin
 	@Override
 	protected void startUp() throws Exception
 	{
-		panel = new CollectivePanel(config, webhookClient, eventRecorder);
+		panel = new CollectivePanel(config, configManager, webhookClient, eventRecorder);
 
 		final NavigationButton.NavigationButtonBuilder builder = NavigationButton.builder()
 			.tooltip(PanelConstants.NAV_TOOLTIP)
@@ -206,11 +211,18 @@ public class CollectivePlugin extends Plugin
 			final CollectivePanel current = panel;
 			if (current != null)
 			{
+				current.setLocalRsn(null);
 				current.updateClan(ClanSnapshot.EMPTY);
 				current.setClanStatsVisible(false);
 				current.setPlaytimeVisible(false);
 			}
 		}
+	}
+
+	private String localRsn()
+	{
+		final Player local = client.getLocalPlayer();
+		return local != null && local.getName() != null ? Text.toJagexName(local.getName()) : null;
 	}
 
 	private void pushClanSnapshot()
@@ -220,6 +232,8 @@ public class CollectivePlugin extends Plugin
 		{
 			return;
 		}
+
+		current.setLocalRsn(localRsn());
 
 		final ClanSnapshot snapshot = clanInfoService.snapshot();
 		current.updateClan(snapshot);
