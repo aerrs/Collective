@@ -1,8 +1,5 @@
 package cc.clancollective.plugin;
 
-import cc.clancollective.plugin.domain.ChatPrivacyMode;
-import cc.clancollective.plugin.domain.CombatTier;
-import cc.clancollective.plugin.domain.LevelNotifyMode;
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
@@ -16,26 +13,12 @@ public interface CollectiveConfig extends Config
 	String GROUP = "collective";
 
 	@ConfigSection(
-		name = "Screenshots",
-		description = "How screenshots are captured and attached to webhook posts.",
-		position = 0
-	)
-	String SECTION_SCREENSHOT = "screenshot";
-
-	@ConfigSection(
 		name = "Network",
 		description = "Webhook delivery: timeouts and retry behaviour.",
 		position = 1,
 		closedByDefault = true
 	)
 	String SECTION_NETWORK = "network";
-
-	@ConfigSection(
-		name = "Drops",
-		description = "Post item drops to a Discord webhook.",
-		position = 2
-	)
-	String SECTION_DROPS = "drops";
 
 	@ConfigSection(
 		name = "Clan chat",
@@ -52,47 +35,18 @@ public interface CollectiveConfig extends Config
 	String SECTION_CLAN_ADMIN = "clanAdmin";
 
 	@ConfigSection(
-		name = "Milestones",
-		description = "Post personal achievements - combat tasks, personal bests, pets, level-ups, quests and clues.",
-		position = 5
+		name = "Clan stats",
+		description = "Show your clan's EHP/EHB and totals in the side panel, from Clan Collective.",
+		position = 7
 	)
-	String SECTION_MILESTONES = "milestones";
+	String SECTION_CLAN_STATS = "clanStats";
 
 	@ConfigSection(
-		name = "Combat & PvP",
-		description = "Post deaths, player kills and loot keys to a Discord webhook.",
-		position = 6
+		name = "Playtime",
+		description = "Track your logged-in playtime and show a clan leaderboard, via Clan Collective.",
+		position = 8
 	)
-	String SECTION_COMBAT = "combat";
-
-	@ConfigItem(
-		keyName = "chatPrivacy",
-		name = "Chat privacy",
-		description = "How much of the chat interface to hide before capturing a screenshot. "
-			+ "Hiding chat causes a brief flicker in-client as it's hidden for the capture. "
-			+ "Defaults to hiding all chat so private conversations never leak into a post; "
-			+ "choose Show all for no flicker, but be aware chat will then appear in screenshots.",
-		section = SECTION_SCREENSHOT,
-		position = 0
-	)
-	default ChatPrivacyMode chatPrivacy()
-	{
-		return ChatPrivacyMode.HIDE_ALL;
-	}
-
-	@Range(min = 10, max = 100)
-	@ConfigItem(
-		keyName = "screenshotScale",
-		name = "Screenshot scale",
-		description = "Percentage to scale captured screenshots to before sending. Lower values reduce upload size.",
-		section = SECTION_SCREENSHOT,
-		position = 1
-	)
-	@Units(Units.PERCENT)
-	default int screenshotScale()
-	{
-		return 100;
-	}
+	String SECTION_PLAYTIME = "playtime";
 
 	@Range(min = 1, max = 60)
 	@ConfigItem(
@@ -137,58 +91,6 @@ public interface CollectiveConfig extends Config
 	}
 
 	@ConfigItem(
-		keyName = "dropsWebhook",
-		name = "Drops webhook URL",
-		secret = true,
-		description = "Discord webhook URL(s) to post drops to. Put one URL per line to post to multiple channels.",
-		section = SECTION_DROPS,
-		position = 0
-	)
-	default String dropsWebhook()
-	{
-		return "";
-	}
-
-	@ConfigItem(
-		keyName = "notifyDrops",
-		name = "Drops",
-		description = "Post item drops from NPC kills and player kills, including the items and their total value, to the configured Discord webhook.",
-		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
-		section = SECTION_DROPS,
-		position = 1
-	)
-	default boolean notifyDrops()
-	{
-		return false;
-	}
-
-	@Range(min = 0)
-	@ConfigItem(
-		keyName = "dropsMinValue",
-		name = "Minimum value",
-		description = "Only post drops whose total value is at least this many coins. Set to 0 to post everything.",
-		section = SECTION_DROPS,
-		position = 2
-	)
-	default int dropsMinValue()
-	{
-		return 50_000;
-	}
-
-	@ConfigItem(
-		keyName = "dropsScreenshot",
-		name = "Include screenshot",
-		description = "Attach a screenshot to drop posts. Screenshots may show other players and, unless hidden, chat; the chat privacy setting applies.",
-		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
-		section = SECTION_DROPS,
-		position = 3
-	)
-	default boolean dropsScreenshot()
-	{
-		return false;
-	}
-
-	@ConfigItem(
 		keyName = "chatWebhook",
 		name = "Clan chat webhook URL",
 		secret = true,
@@ -204,7 +106,7 @@ public interface CollectiveConfig extends Config
 	@ConfigItem(
 		keyName = "clanFilter",
 		name = "Clan name filter",
-		description = "If set, clan chat, clan admin, rank, PvP and personal-best relays only fire for the clan with this exact name. Leave blank to relay for whichever clan you are currently in.",
+		description = "If set, clan chat, clan admin and rank relays only fire for the clan with this exact name. Leave blank to relay for whichever clan you are currently in.",
 		section = SECTION_CHAT,
 		position = 1
 	)
@@ -318,272 +220,70 @@ public interface CollectiveConfig extends Config
 	}
 
 	@ConfigItem(
-		keyName = "milestonesWebhook",
-		name = "Milestones webhook URL",
-		secret = true,
-		description = "Discord webhook URL(s) to post milestones to. Put one URL per line to post to multiple channels.",
-		section = SECTION_MILESTONES,
+		keyName = "showClanStats",
+		name = "Show clan stats",
+		description = "Show your clan's EHP, EHB, total XP and member count in the side panel. "
+			+ "Stats come from Clan Collective (clancollective.cc), which sources them from Wise Old Man / TempleOSRS. "
+			+ "Your clan must be listed on Clan Collective for stats to appear.",
+		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
+		section = SECTION_CLAN_STATS,
 		position = 0
 	)
-	default String milestonesWebhook()
+	default boolean showClanStats()
 	{
-		return "";
+		return false;
 	}
 
 	@ConfigItem(
-		keyName = "milestonesScreenshot",
-		name = "Include screenshot",
-		description = "Attach a screenshot to milestone posts. Screenshots may show other players and, unless hidden, chat; the chat privacy setting applies.",
-		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
-		section = SECTION_MILESTONES,
+		keyName = "clanCollectiveSlug",
+		name = "Clan Collective slug",
+		description = "Optional. The slug from your clan's Clan Collective page URL "
+			+ "(clancollective.cc/clans/your-slug). Leave blank to match automatically by your in-game clan name.",
+		section = SECTION_CLAN_STATS,
 		position = 1
 	)
-	default boolean milestonesScreenshot()
-	{
-		return false;
-	}
-
-	@ConfigItem(
-		keyName = "notifyCombatTasks",
-		name = "Combat tasks",
-		description = "Post when you complete a combat achievement task.",
-		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
-		section = SECTION_MILESTONES,
-		position = 2
-	)
-	default boolean notifyCombatTasks()
-	{
-		return false;
-	}
-
-	@ConfigItem(
-		keyName = "combatTaskMinTier",
-		name = "Combat task min tier",
-		description = "Only post combat tasks of at least this tier.",
-		section = SECTION_MILESTONES,
-		position = 3
-	)
-	default CombatTier combatTaskMinTier()
-	{
-		return CombatTier.EASY;
-	}
-
-	@ConfigItem(
-		keyName = "notifyPersonalBests",
-		name = "Personal bests",
-		description = "Post when you achieve a new personal best time.",
-		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
-		section = SECTION_MILESTONES,
-		position = 4
-	)
-	default boolean notifyPersonalBests()
-	{
-		return false;
-	}
-
-	@ConfigItem(
-		keyName = "notifyPets",
-		name = "Pets",
-		description = "Post when you receive a pet.",
-		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
-		section = SECTION_MILESTONES,
-		position = 5
-	)
-	default boolean notifyPets()
-	{
-		return false;
-	}
-
-	@ConfigItem(
-		keyName = "notifyLevels",
-		name = "Level-ups",
-		description = "Post when you level up a skill.",
-		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
-		section = SECTION_MILESTONES,
-		position = 6
-	)
-	default boolean notifyLevels()
-	{
-		return false;
-	}
-
-	@ConfigItem(
-		keyName = "levelMode",
-		name = "Level-up mode",
-		description = "Which level-ups to post: every level, every N levels, or only when a skill reaches 99.",
-		section = SECTION_MILESTONES,
-		position = 7
-	)
-	default LevelNotifyMode levelMode()
-	{
-		return LevelNotifyMode.EVERY_LEVEL;
-	}
-
-	@Range(min = 2, max = 99)
-	@ConfigItem(
-		keyName = "levelInterval",
-		name = "Level interval",
-		description = "When level-up mode is 'Every N levels', post only on levels that are a multiple of this number.",
-		section = SECTION_MILESTONES,
-		position = 8
-	)
-	default int levelInterval()
-	{
-		return 10;
-	}
-
-	@Range(min = 0, max = 200)
-	@ConfigItem(
-		keyName = "xpMilestoneInterval",
-		name = "XP milestone interval",
-		description = "Also post whenever a skill crosses a multiple of this many million XP. Set to 0 to disable.",
-		section = SECTION_MILESTONES,
-		position = 9
-	)
-	default int xpMilestoneInterval()
-	{
-		return 0;
-	}
-
-	@ConfigItem(
-		keyName = "notifyQuests",
-		name = "Quests",
-		description = "Post when you complete a quest.",
-		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
-		section = SECTION_MILESTONES,
-		position = 10
-	)
-	default boolean notifyQuests()
-	{
-		return false;
-	}
-
-	@ConfigItem(
-		keyName = "notifyClues",
-		name = "Clues",
-		description = "Post when you complete a clue scroll.",
-		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
-		section = SECTION_MILESTONES,
-		position = 11
-	)
-	default boolean notifyClues()
-	{
-		return false;
-	}
-
-	@ConfigItem(
-		keyName = "clueMinTier",
-		name = "Clue min tier",
-		description = "Only post clues of at least this tier.",
-		section = SECTION_MILESTONES,
-		position = 12
-	)
-	default CombatTier clueMinTier()
-	{
-		return CombatTier.BEGINNER;
-	}
-
-	@Range(min = 0)
-	@ConfigItem(
-		keyName = "clueMinValue",
-		name = "Clue minimum value",
-		description = "Only post clues whose total reward value is at least this many coins. Set to 0 to post everything.",
-		section = SECTION_MILESTONES,
-		position = 13
-	)
-	default int clueMinValue()
-	{
-		return 0;
-	}
-
-	@ConfigItem(
-		keyName = "pbWebhook",
-		name = "Personal best webhook URL",
-		secret = true,
-		description = "Discord webhook URL(s) to post personal bests to. Put one URL per line to post to multiple channels. Falls back to the milestones webhook if left blank.",
-		section = SECTION_MILESTONES,
-		position = 14
-	)
-	default String pbWebhook()
+	default String clanCollectiveSlug()
 	{
 		return "";
 	}
 
 	@ConfigItem(
-		keyName = "pbScreenshot",
-		name = "Personal best screenshot",
-		description = "Attach a screenshot to your own personal-best posts. Screenshots may show other players and, unless hidden, chat; the chat privacy setting applies.",
+		keyName = "playtimeEnabled",
+		name = "Track playtime",
+		description = "Send your logged-in playtime to Clan Collective and show your clan's playtime leaderboard "
+			+ "in the side panel. Requires a playtime token from your clan's Clan Collective dashboard.",
 		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
-		section = SECTION_MILESTONES,
-		position = 15
-	)
-	default boolean pbScreenshot()
-	{
-		return false;
-	}
-
-	@ConfigItem(
-		keyName = "combatWebhook",
-		name = "Combat webhook URL",
-		secret = true,
-		description = "Discord webhook URL(s) to post combat events to. Put one URL per line to post to multiple channels.",
-		section = SECTION_COMBAT,
+		section = SECTION_PLAYTIME,
 		position = 0
 	)
-	default String combatWebhook()
+	default boolean playtimeEnabled()
+	{
+		return false;
+	}
+
+	@ConfigItem(
+		keyName = "playtimeToken",
+		name = "Playtime token",
+		secret = true,
+		description = "The playtime token from your clan's Clan Collective dashboard (Edit clan → Plugin & Playtime). "
+			+ "Without a valid token, playtime submissions are rejected.",
+		section = SECTION_PLAYTIME,
+		position = 1
+	)
+	default String playtimeToken()
 	{
 		return "";
 	}
 
 	@ConfigItem(
-		keyName = "combatScreenshot",
-		name = "Include screenshot",
-		description = "Attach a screenshot to combat posts. Screenshots may show other players and, unless hidden, chat; the chat privacy setting applies.",
-		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
-		section = SECTION_COMBAT,
-		position = 1
-	)
-	default boolean combatScreenshot()
-	{
-		return false;
-	}
-
-	@ConfigItem(
-		keyName = "notifyDeaths",
-		name = "Deaths",
-		description = "Post when you die, with the value of items lost.",
-		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
-		section = SECTION_COMBAT,
+		keyName = "playtimeBackendUrl",
+		name = "Backend URL",
+		description = "Base URL of the Clan Collective server that stores playtime. Leave as the default unless you self-host.",
+		section = SECTION_PLAYTIME,
 		position = 2
 	)
-	default boolean notifyDeaths()
+	default String playtimeBackendUrl()
 	{
-		return false;
-	}
-
-	@Range(min = 0)
-	@ConfigItem(
-		keyName = "deathMinValue",
-		name = "Death minimum value",
-		description = "Only post deaths where the value of lost items is at least this many coins. Set to 0 to post every death.",
-		section = SECTION_COMBAT,
-		position = 3
-	)
-	default int deathMinValue()
-	{
-		return 0;
-	}
-
-	@ConfigItem(
-		keyName = "notifyPvp",
-		name = "PvP kills, deaths & loot keys",
-		description = "Relay clan PvP broadcasts (kills, deaths, loot keys), including the names in the broadcast, to the configured Discord webhook.",
-		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
-		section = SECTION_COMBAT,
-		position = 4
-	)
-	default boolean notifyPvp()
-	{
-		return false;
+		return "https://clancollective.cc";
 	}
 }

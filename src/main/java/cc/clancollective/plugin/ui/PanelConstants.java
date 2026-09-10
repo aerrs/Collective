@@ -50,9 +50,43 @@ public final class PanelConstants
 	public static final String NAV_TOOLTIP = "Collective";
 	public static final String TITLE_TEXT = "Collective";
 
+	public static final String SECTION_CLAN = "Clan";
+	public static final String SECTION_ROSTER = "Roster";
+	public static final String SECTION_CLAN_STATS = "Clan stats";
+	public static final String SECTION_PLAYTIME = "Playtime";
+
+	public static final String ROSTER_EMPTY = "Roster loads once your clan settings are open.";
+	public static final int ROSTER_MAX_HEIGHT = 240;
+	public static final int ROSTER_ICON_SIZE = 16;
+
+	public static final String PLAYTIME_LOADING = "Loading playtime leaderboard…";
+	public static final String PLAYTIME_EMPTY =
+		"No playtime recorded yet. It appears once members with the plugin log in.";
+	public static final int PLAYTIME_MAX_HEIGHT = 240;
 	public static final String SECTION_FEEDS = "Feed health";
 	public static final String SECTION_EVENTS = "Events";
 	public static final String SECTION_SETUP = "Setup";
+
+	public static final String STATS_LOADING = "Loading clan stats…";
+	public static final String STATS_NOT_LISTED =
+		"This clan isn't on Clan Collective yet. List it at clancollective.cc to see stats here.";
+	public static final String STATS_ERROR = "Couldn't reach Clan Collective. Retrying shortly.";
+	public static final String STATS_PENDING =
+		"Stats haven't synced yet. They'll appear once Clan Collective updates from the trackers.";
+	public static final String STATS_EHP = "EHP";
+	public static final String STATS_EHB = "EHB";
+	public static final String STATS_TOTAL_XP = "Total XP";
+	public static final String STATS_MEMBERS = "Members";
+	public static final String STATS_WEEKLY_HEADER = "THIS WEEK";
+	public static final String STATS_EHP_GAINED = "EHP gained";
+	public static final String STATS_EHB_GAINED = "EHB gained";
+
+	public static final String CLAN_NONE_TITLE = "Not in a clan";
+	public static final String CLAN_NONE_HINT =
+		"Join a clan in-game to see who's online, your rank, and member counts here.";
+	public static final String CLAN_YOU_PREFIX = "You: ";
+	public static final int CLAN_MEMBERS_MAX = 40;
+	public static final String CLAN_WORLD_PREFIX = "W";
 
 	public static final String EVENT_START = "Start";
 	public static final String EVENT_STOP = "Stop";
@@ -64,7 +98,7 @@ public final class PanelConstants
 
 	public static final String SETUP_PLACEHOLDER =
 		"Add your clan's Discord webhook URLs in the plugin settings, then enable the feeds you want. "
-			+ "Drops, clan chat, clan admin, milestones and combat each post to their own webhook.";
+			+ "Clan chat and clan admin each post to their own webhook.";
 
 	public static final String NO_FEEDS_TEXT =
 		"No webhooks configured yet. Add one in the plugin settings to see its status here.";

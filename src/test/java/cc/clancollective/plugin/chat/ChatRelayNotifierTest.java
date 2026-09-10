@@ -240,27 +240,27 @@ public class ChatRelayNotifierTest
 	}
 
 	@Test
-	public void excludesCombatTaskBroadcastFromGenericRelay()
+	public void relaysCombatTaskBroadcastThroughGenericRelay()
 	{
 		notifier.onChatMessage(message(ChatMessageType.CLAN_MESSAGE, "",
 			"AER5 has completed a combat task: Peach Conjurer."));
-		verify(webhookClient, never()).send(eq(CHAT_WEBHOOK), any(WebhookPayload.class));
+		verify(webhookClient).send(eq(CHAT_WEBHOOK), any(WebhookPayload.class));
 	}
 
 	@Test
-	public void excludesPetBroadcastFromGenericRelay()
+	public void relaysPetBroadcastThroughGenericRelay()
 	{
 		notifier.onChatMessage(message(ChatMessageType.CLAN_MESSAGE, "",
 			"AER5 has a funny feeling like they're being followed."));
-		verify(webhookClient, never()).send(eq(CHAT_WEBHOOK), any(WebhookPayload.class));
+		verify(webhookClient).send(eq(CHAT_WEBHOOK), any(WebhookPayload.class));
 	}
 
 	@Test
-	public void excludesPvpDeathBroadcastFromGenericRelay()
+	public void relaysPvpDeathBroadcastThroughGenericRelay()
 	{
 		notifier.onChatMessage(message(ChatMessageType.CLAN_MESSAGE, "",
 			"AER5 has been defeated by Pker and lost (1,200,000 coins)."));
-		verify(webhookClient, never()).send(eq(CHAT_WEBHOOK), any(WebhookPayload.class));
+		verify(webhookClient).send(eq(CHAT_WEBHOOK), any(WebhookPayload.class));
 	}
 
 	@Test

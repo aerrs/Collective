@@ -4,25 +4,25 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 import net.runelite.api.Client;
 import net.runelite.api.Player;
 import net.runelite.api.clan.ClanChannel;
 
 public class EventRecorder
 {
-	private final Set<String> attendees = new LinkedHashSet<>();
+	private final Map<String, Instant> firstSeen = new LinkedHashMap<>();
 	private boolean recording;
 	private boolean needsSeed;
 	private Instant startedAt;
-	private Duration frozenElapsed = Duration.ZERO;
+	private Instant stoppedAt;
 
 	public void start()
 	{
-		attendees.clear();
-		frozenElapsed = Duration.ZERO;
+		firstSeen.clear();
+		stoppedAt = null;
 		startedAt = Instant.now();
 		recording = true;
 		needsSeed = true;
@@ -32,20 +32,19 @@ public class EventRecorder
 	{
 		if (recording)
 		{
-			frozenElapsed = elapsed();
+			stoppedAt = Instant.now();
 			recording = false;
 			needsSeed = false;
-			startedAt = null;
 		}
 	}
 
 	public void reset()
 	{
-		attendees.clear();
-		frozenElapsed = Duration.ZERO;
+		firstSeen.clear();
 		recording = false;
 		needsSeed = false;
 		startedAt = null;
+		stoppedAt = null;
 	}
 
 	public boolean seedIfNeeded(final Client client)
@@ -62,7 +61,7 @@ public class EventRecorder
 		}
 		needsSeed = false;
 
-		final int before = attendees.size();
+		final int before = firstSeen.size();
 
 		final Player self = client.getLocalPlayer();
 		if (self != null)
@@ -78,7 +77,7 @@ public class EventRecorder
 			}
 		}
 
-		return attendees.size() != before;
+		return firstSeen.size() != before;
 	}
 
 	public boolean onPlayerSpawned(final Player player, final ClanChannel channel)
@@ -100,7 +99,12 @@ public class EventRecorder
 		{
 			return false;
 		}
-		return attendees.add(name);
+		if (firstSeen.containsKey(name))
+		{
+			return false;
+		}
+		firstSeen.put(name, Instant.now());
+		return true;
 	}
 
 	public boolean isRecording()
@@ -110,25 +114,53 @@ public class EventRecorder
 
 	public int count()
 	{
-		return attendees.size();
+		return firstSeen.size();
 	}
 
 	public Duration elapsed()
 	{
-		if (recording && startedAt != null)
+		if (startedAt == null)
 		{
-			return Duration.between(startedAt, Instant.now());
+			return Duration.ZERO;
 		}
-		return frozenElapsed;
+		return Duration.between(startedAt, endReference());
+	}
+
+	private Instant endReference()
+	{
+		if (recording)
+		{
+			return Instant.now();
+		}
+		return stoppedAt != null ? stoppedAt : startedAt;
 	}
 
 	public List<String> names()
 	{
-		return Collections.unmodifiableList(new ArrayList<>(attendees));
+		return Collections.unmodifiableList(new ArrayList<>(firstSeen.keySet()));
+	}
+
+	public List<String> lines()
+	{
+		final Instant end = endReference();
+		final List<String> out = new ArrayList<>();
+		for (final Map.Entry<String, Instant> entry : firstSeen.entrySet())
+		{
+			out.add(entry.getKey() + " - " + formatDuration(Duration.between(entry.getValue(), end)));
+		}
+		return out;
 	}
 
 	public String toClipboard()
 	{
-		return String.join(System.lineSeparator(), attendees);
+		return String.join(System.lineSeparator(), lines());
+	}
+
+	static String formatDuration(final Duration duration)
+	{
+		final long total = Math.max(0, duration.getSeconds());
+		final long minutes = total / 60;
+		final long seconds = total % 60;
+		return String.format("%d:%02d", minutes, seconds);
 	}
 }
