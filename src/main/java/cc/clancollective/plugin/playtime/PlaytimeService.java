@@ -26,6 +26,7 @@ public class PlaytimeService
 	private static final String USER_AGENT = "Collective RuneLite Plugin";
 	private static final long REFRESH_MS = 300_000L;
 	private static final long ERROR_RETRY_MS = 60_000L;
+	private static final int WINDOW_DAYS = 7;
 
 	private final OkHttpClient httpClient;
 	private final Gson gson;
@@ -40,7 +41,10 @@ public class PlaytimeService
 	@Inject
 	public PlaytimeService(final OkHttpClient runeliteClient, final Gson gson, final CollectiveConfig config)
 	{
-		this.httpClient = runeliteClient;
+		this.httpClient = runeliteClient.newBuilder()
+			.followRedirects(false)
+			.followSslRedirects(false)
+			.build();
 		this.gson = gson;
 		this.config = config;
 	}
@@ -90,7 +94,7 @@ public class PlaytimeService
 		final Consumer<List<PlaytimeEntry>> callback)
 	{
 		final HttpUrl base = HttpUrl.parse(config.playtimeBackendUrl().trim());
-		if (base == null)
+		if (base == null || !PlaytimeTracker.isSecure(base))
 		{
 			finish(lookup, null, callback);
 			return;
@@ -98,6 +102,7 @@ public class PlaytimeService
 		final HttpUrl url = base.newBuilder()
 			.addPathSegments("api/clan/playtime/leaderboard")
 			.addQueryParameter(useSlug ? "slug" : "cc", value)
+			.addQueryParameter("days", Integer.toString(WINDOW_DAYS))
 			.build();
 
 		final Request request = new Request.Builder()
