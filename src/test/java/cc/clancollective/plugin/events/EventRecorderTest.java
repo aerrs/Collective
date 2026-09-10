@@ -305,8 +305,20 @@ public class EventRecorderTest
 		recorder.onPlayerSpawned(charlie, channel);
 
 		assertEquals(Arrays.asList("Alice", "Bob", "Charlie"), recorder.names());
-		assertEquals("Alice" + System.lineSeparator() + "Bob" + System.lineSeparator() + "Charlie",
-			recorder.toClipboard());
+
+		final String[] clipboardLines = recorder.toClipboard().split(System.lineSeparator());
+		assertEquals(3, clipboardLines.length);
+		assertTrue(clipboardLines[0].startsWith("Alice - "));
+		assertTrue(clipboardLines[1].startsWith("Bob - "));
+		assertTrue(clipboardLines[2].startsWith("Charlie - "));
+	}
+
+	@Test
+	public void attendanceLineFormatsMinutesAndSeconds()
+	{
+		assertEquals("0:00", EventRecorder.formatDuration(Duration.ZERO));
+		assertEquals("1:05", EventRecorder.formatDuration(Duration.ofSeconds(65)));
+		assertEquals("12:00", EventRecorder.formatDuration(Duration.ofMinutes(12)));
 	}
 
 	@Test

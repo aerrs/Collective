@@ -1,8 +1,6 @@
 package cc.clancollective.plugin.chat;
 
 import cc.clancollective.plugin.CollectiveConfig;
-import cc.clancollective.plugin.combat.CombatNotifier;
-import cc.clancollective.plugin.milestones.MilestoneNotifier;
 import cc.clancollective.plugin.net.EmbedStyle;
 import cc.clancollective.plugin.net.WebhookClient;
 import cc.clancollective.plugin.net.WebhookPayload;
@@ -34,13 +32,6 @@ public class ChatRelayNotifier
 		"To talk in your clan's channel",
 		"You are now a member of",
 		"You are not in a clan chat channel",
-	};
-
-	private static final String[] MILESTONE_BROADCASTS = {
-		"has completed a combat task",
-		"has a funny feeling",
-		"feels something weird sneaking",
-		"would have been followed",
 	};
 
 	private final Client client;
@@ -136,33 +127,12 @@ public class ChatRelayNotifier
 			return;
 		}
 
-		if (isDedicatedFeed(message))
-		{
-			return;
-		}
-
 		if (config.relayBroadcasts() && chatEnabled())
 		{
 			final String cleaned = CA_PREFIX.matcher(message).replaceFirst("");
 			send(config.chatWebhook(), KIND_BROADCAST, channel.getName(),
 				WebhookPayload.quote(WebhookPayload.bold(cleaned)), EmbedStyle.BROADCAST);
 		}
-	}
-
-	private static boolean isDedicatedFeed(final String message)
-	{
-		if (CombatNotifier.isPvpBroadcast(message) || MilestoneNotifier.isPersonalBestBroadcast(message))
-		{
-			return true;
-		}
-		for (final String marker : MILESTONE_BROADCASTS)
-		{
-			if (message.contains(marker))
-			{
-				return true;
-			}
-		}
-		return false;
 	}
 
 	private void relayMessage(final ClanChannel channel, final ChatMessage event)

@@ -188,7 +188,7 @@ public class WebhookClient
 					}
 
 					retryOrDrop(url, json, screenshotName, image, attempt,
-						"HTTP " + code, retryAfterMs, retryable);
+						"HTTP " + code + reason(r), retryAfterMs, retryable);
 				}
 			}
 		});
@@ -265,6 +265,24 @@ public class WebhookClient
 			}
 		}
 		pendingRetries.clear();
+	}
+
+	private static String reason(final Response response)
+	{
+		if (response.isSuccessful())
+		{
+			return "";
+		}
+		try
+		{
+			final okhttp3.ResponseBody responseBody = response.peekBody(512);
+			final String text = responseBody.string().trim();
+			return text.isEmpty() ? "" : ": " + text;
+		}
+		catch (IOException | RuntimeException ignored)
+		{
+			return "";
+		}
 	}
 
 	private static long parseRetryAfter(final Response response)

@@ -1,12 +1,14 @@
 package cc.clancollective.plugin;
 
 import cc.clancollective.plugin.chat.ChatRelayNotifier;
+import cc.clancollective.plugin.clan.ClanInfoService;
 import cc.clancollective.plugin.clan.ClanRankTracker;
-import cc.clancollective.plugin.combat.CombatNotifier;
+import cc.clancollective.plugin.clan.ClanSnapshot;
+import cc.clancollective.plugin.clan.CollectiveStatsService;
 import cc.clancollective.plugin.events.EventRecorder;
-import cc.clancollective.plugin.milestones.MilestoneNotifier;
 import cc.clancollective.plugin.net.WebhookClient;
-import cc.clancollective.plugin.notifiers.DropNotifier;
+import cc.clancollective.plugin.playtime.PlaytimeService;
+import cc.clancollective.plugin.playtime.PlaytimeTracker;
 import cc.clancollective.plugin.ui.CollectivePanel;
 import cc.clancollective.plugin.ui.PanelConstants;
 import com.google.inject.Provides;
@@ -16,18 +18,13 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.clan.ClanChannel;
-import net.runelite.api.events.ActorDeath;
+import net.runelite.api.events.ClanChannelChanged;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
-import net.runelite.api.events.InteractingChanged;
 import net.runelite.api.events.PlayerSpawned;
-import net.runelite.api.events.StatChanged;
-import net.runelite.api.events.WidgetLoaded;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.events.ConfigChanged;
-import net.runelite.client.events.NpcLootReceived;
-import net.runelite.client.events.PlayerLootReceived;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
@@ -38,8 +35,8 @@ import net.runelite.client.util.ImageUtil;
 @Slf4j
 @PluginDescriptor(
 	name = "Collective",
-	description = "Multi-clan Discord integration for OSRS clans",
-	tags = {"clan", "discord", "webhook", "drops"}
+	description = "Clan tools and Discord integration for OSRS clans",
+	tags = {"clan", "discord", "webhook", "roster", "playtime"}
 )
 public class CollectivePlugin extends Plugin
 {
@@ -56,23 +53,29 @@ public class CollectivePlugin extends Plugin
 	private WebhookClient webhookClient;
 
 	@Inject
-	private DropNotifier dropNotifier;
-
-	@Inject
 	private ChatRelayNotifier chatRelayNotifier;
 
 	@Inject
 	private ClanRankTracker clanRankTracker;
 
 	@Inject
-	private MilestoneNotifier milestoneNotifier;
+	private ClanInfoService clanInfoService;
 
 	@Inject
-	private CombatNotifier combatNotifier;
+	private CollectiveStatsService collectiveStatsService;
+
+	@Inject
+	private PlaytimeTracker playtimeTracker;
+
+	@Inject
+	private PlaytimeService playtimeService;
+
+	private static final int CLAN_REFRESH_TICKS = 10;
 
 	private final EventRecorder eventRecorder = new EventRecorder();
 	private CollectivePanel panel;
 	private NavigationButton navButton;
+	private int ticksUntilClanRefresh = CLAN_REFRESH_TICKS;
 
 	@Override
 	protected void startUp() throws Exception
@@ -101,6 +104,7 @@ public class CollectivePlugin extends Plugin
 	protected void shutDown() throws Exception
 	{
 		webhookClient.cancelPendingRetries();
+		playtimeTracker.shutDown();
 
 		if (panel != null)
 		{
@@ -123,70 +127,22 @@ public class CollectivePlugin extends Plugin
 	}
 
 	@Subscribe
-	public void onNpcLootReceived(final NpcLootReceived event)
-	{
-		dropNotifier.onNpcLootReceived(event);
-	}
-
-	@Subscribe
-	public void onPlayerLootReceived(final PlayerLootReceived event)
-	{
-		dropNotifier.onPlayerLootReceived(event);
-	}
-
-	@Subscribe
 	public void onChatMessage(final ChatMessage event)
 	{
 		chatRelayNotifier.onChatMessage(event);
-
-		switch (event.getType())
-		{
-			case GAMEMESSAGE:
-				if (!"runelite".equals(event.getName()))
-				{
-					milestoneNotifier.onGameMessage(event.getMessage());
-				}
-				break;
-			case CLAN_MESSAGE:
-			case BROADCAST:
-				combatNotifier.onClanBroadcast(event.getMessage());
-				milestoneNotifier.onClanBroadcast(event.getMessage());
-				break;
-			default:
-				break;
-		}
-	}
-
-	@Subscribe
-	public void onStatChanged(final StatChanged event)
-	{
-		milestoneNotifier.onStatChanged(event);
-	}
-
-	@Subscribe
-	public void onWidgetLoaded(final WidgetLoaded event)
-	{
-		milestoneNotifier.onWidgetLoaded(event);
-	}
-
-	@Subscribe
-	public void onActorDeath(final ActorDeath event)
-	{
-		combatNotifier.onActorDeath(event);
-	}
-
-	@Subscribe
-	public void onInteractingChanged(final InteractingChanged event)
-	{
-		combatNotifier.onInteractingChanged(event);
 	}
 
 	@Subscribe
 	public void onGameTick(final GameTick event)
 	{
 		clanRankTracker.onGameTick();
-		milestoneNotifier.onGameTick();
-		combatNotifier.onGameTick();
+		playtimeTracker.onGameTick();
+
+		if (--ticksUntilClanRefresh <= 0)
+		{
+			ticksUntilClanRefresh = CLAN_REFRESH_TICKS;
+			pushClanSnapshot();
+		}
 
 		if (eventRecorder.isRecording())
 		{
@@ -224,13 +180,84 @@ public class CollectivePlugin extends Plugin
 	}
 
 	@Subscribe
+	public void onClanChannelChanged(final ClanChannelChanged event)
+	{
+		pushClanSnapshot();
+	}
+
+	@Subscribe
 	public void onGameStateChanged(final GameStateChanged event)
 	{
-		if (event.getGameState() == GameState.LOGIN_SCREEN || event.getGameState() == GameState.HOPPING)
+		final GameState state = event.getGameState();
+		if (state == GameState.LOGGED_IN)
+		{
+			playtimeTracker.onLogin();
+		}
+		if (state == GameState.LOGIN_SCREEN || state == GameState.HOPPING
+			|| state == GameState.CONNECTION_LOST)
+		{
+			playtimeTracker.onLogout();
+		}
+		if (state == GameState.LOGIN_SCREEN || state == GameState.HOPPING)
 		{
 			clanRankTracker.reset();
-			milestoneNotifier.reset();
-			combatNotifier.reset();
+			ticksUntilClanRefresh = CLAN_REFRESH_TICKS;
+
+			final CollectivePanel current = panel;
+			if (current != null)
+			{
+				current.updateClan(ClanSnapshot.EMPTY);
+				current.setClanStatsVisible(false);
+				current.setPlaytimeVisible(false);
+			}
+		}
+	}
+
+	private void pushClanSnapshot()
+	{
+		final CollectivePanel current = panel;
+		if (current == null)
+		{
+			return;
+		}
+
+		final ClanSnapshot snapshot = clanInfoService.snapshot();
+		current.updateClan(snapshot);
+
+		if (config.showClanStats() && snapshot.isInClan())
+		{
+			current.setClanStatsVisible(true);
+			collectiveStatsService.request(snapshot.getClanName(), config.clanCollectiveSlug(),
+				stats ->
+				{
+					final CollectivePanel p = panel;
+					if (p != null)
+					{
+						p.updateClanStats(stats);
+					}
+				});
+		}
+		else
+		{
+			current.setClanStatsVisible(false);
+		}
+
+		if (config.playtimeEnabled() && snapshot.isInClan())
+		{
+			current.setPlaytimeVisible(true);
+			playtimeService.request(snapshot.getClanName(), config.clanCollectiveSlug(),
+				entries ->
+				{
+					final CollectivePanel p = panel;
+					if (p != null)
+					{
+						p.updatePlaytime(entries);
+					}
+				});
+		}
+		else
+		{
+			current.setPlaytimeVisible(false);
 		}
 	}
 
