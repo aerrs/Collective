@@ -56,12 +56,16 @@ public final class PanelConstants
 	public static final String SECTION_PLAYTIME = "Playtime";
 
 	public static final String ROSTER_EMPTY = "Roster loads once your clan settings are open.";
+	public static final String ROSTER_FILTER_ALL = "All ranks";
 	public static final int ROSTER_MAX_HEIGHT = 240;
 	public static final int ROSTER_ICON_SIZE = 16;
+
+	public static final int PILL_RADIUS = 8;
 
 	public static final String PLAYTIME_LOADING = "Loading playtime leaderboard…";
 	public static final String PLAYTIME_EMPTY =
 		"No playtime recorded yet. It appears once members with the plugin log in.";
+	public static final String PLAYTIME_SUBHEADER = "Top players · last 7 days";
 	public static final int PLAYTIME_MAX_HEIGHT = 240;
 	public static final String SECTION_FEEDS = "Feed health";
 	public static final String SECTION_EVENTS = "Events";
@@ -97,8 +101,11 @@ public final class PanelConstants
 	public static final String EVENT_NO_NAMES = "No clanmates recorded yet.";
 
 	public static final String SETUP_PLACEHOLDER =
-		"Add your clan's Discord webhook URLs in the plugin settings, then enable the feeds you want. "
-			+ "Clan chat and clan admin each post to their own webhook.";
+		"Roster, member counts and your rank show automatically once you're in a clan.<br><br>"
+			+ "In the plugin settings you can turn on <b>Clan stats</b> and the <b>Playtime leaderboard</b> "
+			+ "(playtime needs a token from your clan's dashboard at clancollective.cc).<br><br>"
+			+ "Add Discord webhook URLs for the <b>Clan chat</b> and <b>Clan admin</b> feeds to relay them, "
+			+ "then use <b>Events</b> to log attendance.";
 
 	public static final String NO_FEEDS_TEXT =
 		"No webhooks configured yet. Add one in the plugin settings to see its status here.";

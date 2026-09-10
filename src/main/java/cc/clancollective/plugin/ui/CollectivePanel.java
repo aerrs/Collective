@@ -1,6 +1,7 @@
 package cc.clancollective.plugin.ui;
 
 import cc.clancollective.plugin.CollectiveConfig;
+import cc.clancollective.plugin.clan.ClanMemberEntry;
 import cc.clancollective.plugin.clan.ClanSnapshot;
 import cc.clancollective.plugin.clan.ClanStats;
 import cc.clancollective.plugin.events.EventRecorder;
@@ -9,6 +10,8 @@ import cc.clancollective.plugin.net.WebhookClient;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.GridLayout;
 import java.awt.RenderingHints;
@@ -17,30 +20,48 @@ import java.awt.datatransfer.StringSelection;
 import java.awt.image.BufferedImage;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import javax.swing.BorderFactory;
+import javax.swing.Box;
 import javax.swing.BoxLayout;
+import javax.swing.DefaultListCellRenderer;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.JLabel;
+import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.MatteBorder;
+import net.runelite.client.config.ConfigManager;
+import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.PluginPanel;
 import net.runelite.client.util.ImageUtil;
 
 public class CollectivePanel extends PluginPanel
 {
 	private final CollectiveConfig config;
+	private final ConfigManager configManager;
 	private final WebhookClient webhookClient;
 	private final EventRecorder recorder;
+	private volatile String localRsn;
 	private final JPanel feedsBody = new JPanel();
 	private final JPanel clanBody = new JPanel();
 	private final JPanel rosterBody = new JPanel();
 	private JPanel rosterSection;
 	private JScrollPane rosterScroll;
+	private JComboBox<String> rankFilter;
+	private boolean updatingRankFilter;
+	private final Map<String, ImageIcon> rankIcons = new HashMap<>();
+	private List<ClanMemberEntry> lastRoster = Collections.emptyList();
 	private String rosterSignature = "";
 	private final JPanel clanStatsBody = new JPanel();
 	private JPanel clanStatsSection;
@@ -56,11 +77,12 @@ public class CollectivePanel extends PluginPanel
 	private JButton eventReset;
 	private JLabel eventStatus;
 
-	public CollectivePanel(final CollectiveConfig config, final WebhookClient webhookClient,
-		final EventRecorder recorder)
+	public CollectivePanel(final CollectiveConfig config, final ConfigManager configManager,
+		final WebhookClient webhookClient, final EventRecorder recorder)
 	{
 		super(true);
 		this.config = config;
+		this.configManager = configManager;
 		this.webhookClient = webhookClient;
 		this.recorder = recorder;
 
@@ -78,8 +100,8 @@ public class CollectivePanel extends PluginPanel
 		content.add(buildRosterSection());
 		content.add(buildClanStatsSection());
 		content.add(buildPlaytimeSection());
-		content.add(buildFeedsSection());
 		content.add(buildEventsSection());
+		content.add(buildFeedsSection());
 		content.add(buildSetupSection());
 		content.add(buildFooter());
 
@@ -98,6 +120,20 @@ public class CollectivePanel extends PluginPanel
 	public void onDeactivate()
 	{
 		webhookClient.removeHealthListener(healthListener);
+	}
+
+	public void setLocalRsn(final String rsn)
+	{
+		localRsn = rsn;
+	}
+
+	private boolean isSelf(final String name)
+	{
+		if (name == null || localRsn == null)
+		{
+			return false;
+		}
+		return name.replace('_', ' ').trim().equalsIgnoreCase(localRsn.replace('_', ' ').trim());
 	}
 
 	private JPanel buildHeader()
@@ -200,12 +236,53 @@ public class CollectivePanel extends PluginPanel
 
 		rosterScroll = new JScrollPane(rosterBody,
 			JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
-		rosterScroll.setBorder(new EmptyBorder(0, 0, 0, 0));
+		rosterScroll.setBorder(new MatteBorder(1, 1, 1, 1, PanelConstants.BORDER));
 		rosterScroll.setBackground(PanelConstants.BG);
 		rosterScroll.getViewport().setBackground(PanelConstants.BG);
 		rosterScroll.getVerticalScrollBar().setUnitIncrement(12);
 
-		rosterSection = section(PanelConstants.SECTION_ROSTER, rosterScroll);
+		rankFilter = new JComboBox<>();
+		rankFilter.setFont(FontManager.getRunescapeSmallFont());
+		rankFilter.setBackground(PanelConstants.SURFACE);
+		rankFilter.setForeground(PanelConstants.TEXT);
+		rankFilter.setFocusable(false);
+		rankFilter.addItem(PanelConstants.ROSTER_FILTER_ALL);
+		rankFilter.setRenderer(new DefaultListCellRenderer()
+		{
+			@Override
+			public Component getListCellRendererComponent(final JList<?> list, final Object value,
+				final int index, final boolean isSelected, final boolean cellHasFocus)
+			{
+				final JLabel label = (JLabel) super.getListCellRendererComponent(
+					list, value, index, isSelected, cellHasFocus);
+				label.setIcon(value == null ? null : rankIcons.get(value));
+				label.setFont(FontManager.getRunescapeSmallFont());
+				return label;
+			}
+		});
+		rankFilter.addActionListener(e ->
+		{
+			if (!updatingRankFilter)
+			{
+				renderRosterRows();
+			}
+		});
+
+		final JPanel filterWrap = new JPanel(new BorderLayout());
+		filterWrap.setBackground(PanelConstants.BG);
+		filterWrap.setBorder(new EmptyBorder(0, 0, PanelConstants.ROW_GAP, 0));
+		filterWrap.add(rankFilter, BorderLayout.CENTER);
+		filterWrap.setMaximumSize(new Dimension(Integer.MAX_VALUE,
+			rankFilter.getPreferredSize().height + PanelConstants.ROW_GAP));
+
+		final JPanel wrap = new JPanel();
+		wrap.setBackground(PanelConstants.BG);
+		wrap.setLayout(new BoxLayout(wrap, BoxLayout.Y_AXIS));
+		wrap.setBorder(new EmptyBorder(0, PanelConstants.ROW_PADDING_X, 0, PanelConstants.ROW_PADDING_X));
+		wrap.add(filterWrap);
+		wrap.add(rosterScroll);
+
+		rosterSection = section(PanelConstants.SECTION_ROSTER, wrap);
 		rosterSection.setVisible(false);
 		return rosterSection;
 	}
@@ -217,21 +294,126 @@ public class CollectivePanel extends PluginPanel
 			return;
 		}
 
-		final List<cc.clancollective.plugin.clan.ClanMemberEntry> roster =
-			snapshot == null ? java.util.Collections.emptyList() : snapshot.getRoster();
+		final List<ClanMemberEntry> roster =
+			snapshot == null ? Collections.emptyList() : snapshot.getRoster();
 
 		if (snapshot == null || !snapshot.isInClan() || roster.isEmpty())
 		{
 			rosterSection.setVisible(false);
 			rosterSignature = "";
+			lastRoster = Collections.emptyList();
 			rosterBody.removeAll();
+			resetRankFilter();
 			rosterSection.revalidate();
 			rosterSection.repaint();
 			return;
 		}
 
-		final String signature = rosterSignatureOf(roster);
+		lastRoster = roster;
 		rosterSection.setVisible(true);
+		rebuildRankFilter(roster);
+		renderRosterRows();
+	}
+
+	private void resetRankFilter()
+	{
+		if (rankFilter == null)
+		{
+			return;
+		}
+		updatingRankFilter = true;
+		try
+		{
+			rankFilter.removeAllItems();
+			rankFilter.addItem(PanelConstants.ROSTER_FILTER_ALL);
+			rankFilter.setSelectedIndex(0);
+		}
+		finally
+		{
+			updatingRankFilter = false;
+		}
+	}
+
+	private void rebuildRankFilter(final List<ClanMemberEntry> roster)
+	{
+		if (rankFilter == null)
+		{
+			return;
+		}
+		buildRankIcons(roster);
+		updatingRankFilter = true;
+		try
+		{
+			final Object current = rankFilter.getSelectedItem();
+			final List<String> titles = distinctRankTitles(roster);
+			rankFilter.removeAllItems();
+			rankFilter.addItem(PanelConstants.ROSTER_FILTER_ALL);
+			for (final String title : titles)
+			{
+				rankFilter.addItem(title);
+			}
+			if (current != null && (PanelConstants.ROSTER_FILTER_ALL.equals(current) || titles.contains(current)))
+			{
+				rankFilter.setSelectedItem(current);
+			}
+			else
+			{
+				rankFilter.setSelectedIndex(0);
+			}
+		}
+		finally
+		{
+			updatingRankFilter = false;
+		}
+	}
+
+	private void buildRankIcons(final List<ClanMemberEntry> roster)
+	{
+		rankIcons.clear();
+		for (final ClanMemberEntry m : roster)
+		{
+			final String title = m.getRankTitle();
+			if (title == null || title.isEmpty() || rankIcons.containsKey(title))
+			{
+				continue;
+			}
+			final BufferedImage icon = m.getRankIcon();
+			if (icon != null)
+			{
+				rankIcons.put(title, new ImageIcon(fitIcon(icon, PanelConstants.ROSTER_ICON_SIZE)));
+			}
+		}
+	}
+
+	private static List<String> distinctRankTitles(final List<ClanMemberEntry> roster)
+	{
+		final Map<String, Integer> order = new LinkedHashMap<>();
+		for (final ClanMemberEntry m : roster)
+		{
+			final String title = m.getRankTitle();
+			if (title == null || title.isEmpty())
+			{
+				continue;
+			}
+			order.merge(title, m.getRankOrder(), Math::max);
+		}
+		final List<String> titles = new ArrayList<>(order.keySet());
+		titles.sort((a, b) ->
+		{
+			final int c = Integer.compare(order.get(b), order.get(a));
+			return c != 0 ? c : a.compareToIgnoreCase(b);
+		});
+		return titles;
+	}
+
+	private void renderRosterRows()
+	{
+		if (rosterSection == null)
+		{
+			return;
+		}
+		final Object selected = rankFilter == null ? null : rankFilter.getSelectedItem();
+		final String signature = selected + "#" + localRsn + "#" + rosterSignatureOf(lastRoster);
 		if (signature.equals(rosterSignature))
 		{
 			return;
@@ -239,9 +421,13 @@ public class CollectivePanel extends PluginPanel
 		rosterSignature = signature;
 
 		rosterBody.removeAll();
-		for (final cc.clancollective.plugin.clan.ClanMemberEntry member : roster)
+		for (final ClanMemberEntry member : lastRoster)
 		{
-			rosterBody.add(rosterRow(member));
+			if (selected == null || PanelConstants.ROSTER_FILTER_ALL.equals(selected)
+				|| selected.equals(member.getRankTitle()))
+			{
+				rosterBody.add(rosterRow(member));
+			}
 		}
 
 		final int rowHeight = rosterBody.getPreferredSize().height;
@@ -249,14 +435,16 @@ public class CollectivePanel extends PluginPanel
 		rosterScroll.setPreferredSize(new Dimension(0, height));
 		rosterScroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, height));
 
+		rosterBody.revalidate();
+		rosterBody.repaint();
 		rosterSection.revalidate();
 		rosterSection.repaint();
 	}
 
-	private static String rosterSignatureOf(final List<cc.clancollective.plugin.clan.ClanMemberEntry> roster)
+	private static String rosterSignatureOf(final List<ClanMemberEntry> roster)
 	{
 		final StringBuilder sb = new StringBuilder(roster.size() * 12);
-		for (final cc.clancollective.plugin.clan.ClanMemberEntry m : roster)
+		for (final ClanMemberEntry m : roster)
 		{
 			sb.append(m.getName()).append(':').append(m.getRankOrder())
 				.append(m.isOnline() ? '1' : '0').append('|');
@@ -264,7 +452,7 @@ public class CollectivePanel extends PluginPanel
 		return sb.toString();
 	}
 
-	private JPanel rosterRow(final cc.clancollective.plugin.clan.ClanMemberEntry member)
+	private JPanel rosterRow(final ClanMemberEntry member)
 	{
 		final JPanel row = new JPanel(new BorderLayout(PanelConstants.ICON_GAP, 0));
 		row.setBackground(PanelConstants.SURFACE);
@@ -281,8 +469,13 @@ public class CollectivePanel extends PluginPanel
 		icon.setToolTipText(member.getRankTitle());
 		row.add(icon, BorderLayout.WEST);
 
+		final boolean self = isSelf(member.getName());
 		final JLabel name = CollectiveSwing.smallLabel(member.getName(),
-			member.isOnline() ? PanelConstants.TEXT : PanelConstants.TEXT_DIM);
+			self ? PanelConstants.ACCENT : (member.isOnline() ? PanelConstants.TEXT : PanelConstants.TEXT_DIM));
+		if (self)
+		{
+			name.setFont(name.getFont().deriveFont(Font.BOLD));
+		}
 		name.setToolTipText(member.getRankTitle() + (member.isOnline() ? " · online" : ""));
 		row.add(name, BorderLayout.CENTER);
 
@@ -370,15 +563,11 @@ public class CollectivePanel extends PluginPanel
 	{
 		clanStatsBody.setBackground(PanelConstants.BG);
 		clanStatsBody.setLayout(new BoxLayout(clanStatsBody, BoxLayout.Y_AXIS));
-		clanStatsSection = section(PanelConstants.SECTION_CLAN_STATS, clanStatsBody);
+		clanStatsSection = collapsibleSection(PanelConstants.SECTION_CLAN_STATS, clanStatsBody, false);
 		clanStatsSection.setVisible(false);
 		return clanStatsSection;
 	}
 
-	/**
-	 * Shows or hides the whole Clan stats section. When first shown it displays a
-	 * loading placeholder until {@link #updateClanStats} delivers data.
-	 */
 	public void setClanStatsVisible(final boolean visible)
 	{
 		if (!SwingUtilities.isEventDispatchThread())
@@ -432,7 +621,6 @@ public class CollectivePanel extends PluginPanel
 				renderStatsMessage(PanelConstants.STATS_NOT_LISTED);
 				break;
 			default:
-				// Only replace the display with an error if we have nothing better shown.
 				if (!clanStatsRendered)
 				{
 					renderStatsMessage(PanelConstants.STATS_ERROR);
@@ -445,25 +633,27 @@ public class CollectivePanel extends PluginPanel
 	{
 		clanStatsBody.removeAll();
 
-		clanStatsBody.add(statRow(PanelConstants.STATS_EHP, formatInt(stats.getEhp())));
-		clanStatsBody.add(javax.swing.Box.createVerticalStrut(PanelConstants.ROW_GAP));
-		clanStatsBody.add(statRow(PanelConstants.STATS_EHB, formatInt(stats.getEhb())));
-		clanStatsBody.add(javax.swing.Box.createVerticalStrut(PanelConstants.ROW_GAP));
-		clanStatsBody.add(statRow(PanelConstants.STATS_TOTAL_XP, formatXp(stats.getTotalXp())));
-		clanStatsBody.add(javax.swing.Box.createVerticalStrut(PanelConstants.ROW_GAP));
-		clanStatsBody.add(statRow(PanelConstants.STATS_MEMBERS, formatInt(stats.getMemberCount())));
+		final JPanel tiles = pillRow(3);
+		tiles.add(statPill(PanelConstants.STATS_EHP, formatInt(stats.getEhp()), null));
+		tiles.add(statPill(PanelConstants.STATS_EHB, formatInt(stats.getEhb()), null));
+		tiles.add(statPill(PanelConstants.STATS_TOTAL_XP, formatXp(stats.getTotalXp()), null));
+		clanStatsBody.add(tiles);
 
 		final ClanStats.Weekly weekly = stats.getWeekly();
 		if (weekly != null && weekly.hasData())
 		{
-			clanStatsBody.add(javax.swing.Box.createVerticalStrut(PanelConstants.ROW_GAP + 3));
+			clanStatsBody.add(Box.createVerticalStrut(PanelConstants.ROW_GAP + 3));
 			final JLabel header = CollectiveSwing.smallLabel(PanelConstants.STATS_WEEKLY_HEADER,
 				PanelConstants.TEXT_DIM);
 			header.setBorder(new EmptyBorder(0, PanelConstants.ROW_PADDING_X, 2, PanelConstants.ROW_PADDING_X));
 			clanStatsBody.add(header);
-			clanStatsBody.add(weeklyRow(PanelConstants.STATS_EHP_GAINED, weekly.getEhpGained(), weekly.getEhpTop()));
-			clanStatsBody.add(javax.swing.Box.createVerticalStrut(PanelConstants.ROW_GAP));
-			clanStatsBody.add(weeklyRow(PanelConstants.STATS_EHB_GAINED, weekly.getEhbGained(), weekly.getEhbTop()));
+
+			final JPanel weeklyTiles = pillRow(2);
+			weeklyTiles.add(statPill(PanelConstants.STATS_EHP, "+" + formatHours(weekly.getEhpGained()),
+				topTooltip(weekly.getEhpTop())));
+			weeklyTiles.add(statPill(PanelConstants.STATS_EHB, "+" + formatHours(weekly.getEhbGained()),
+				topTooltip(weekly.getEhbTop())));
+			clanStatsBody.add(weeklyTiles);
 		}
 
 		final String footer = statsFooter(stats);
@@ -472,13 +662,57 @@ public class CollectivePanel extends PluginPanel
 			final JLabel src = CollectiveSwing.smallLabel(footer, PanelConstants.TEXT_DIM);
 			src.setBorder(new EmptyBorder(PanelConstants.ROW_GAP, PanelConstants.ROW_PADDING_X, 0,
 				PanelConstants.ROW_PADDING_X));
-			clanStatsBody.add(javax.swing.Box.createVerticalStrut(PanelConstants.ROW_GAP));
+			clanStatsBody.add(Box.createVerticalStrut(PanelConstants.ROW_GAP));
 			clanStatsBody.add(src);
 		}
 
 		clanStatsRendered = true;
 		clanStatsBody.revalidate();
 		clanStatsBody.repaint();
+	}
+
+	private JPanel pillRow(final int columns)
+	{
+		final JPanel row = new JPanel(new GridLayout(1, columns, PanelConstants.ROW_GAP, 0));
+		row.setBackground(PanelConstants.BG);
+		row.setBorder(new EmptyBorder(0, PanelConstants.ROW_PADDING_X, 0, PanelConstants.ROW_PADDING_X));
+		row.setAlignmentX(Component.LEFT_ALIGNMENT);
+		return row;
+	}
+
+	private JPanel statPill(final String label, final String value, final String tooltip)
+	{
+		final JPanel pill = new JPanel()
+		{
+			@Override
+			protected void paintComponent(final Graphics g)
+			{
+				final Graphics2D g2 = (Graphics2D) g.create();
+				g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+				g2.setColor(PanelConstants.SURFACE);
+				g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1,
+					PanelConstants.PILL_RADIUS, PanelConstants.PILL_RADIUS);
+				g2.dispose();
+			}
+		};
+		pill.setOpaque(false);
+		pill.setLayout(new BoxLayout(pill, BoxLayout.Y_AXIS));
+		pill.setBorder(new EmptyBorder(6, 4, 6, 4));
+
+		final JLabel valueLabel = CollectiveSwing.smallLabel(value, SwingConstants.CENTER, PanelConstants.TEXT);
+		valueLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+		final JLabel titleLabel = CollectiveSwing.smallLabel(label, SwingConstants.CENTER, PanelConstants.TEXT_DIM);
+		titleLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+		pill.add(valueLabel);
+		pill.add(Box.createVerticalStrut(2));
+		pill.add(titleLabel);
+
+		if (tooltip != null)
+		{
+			pill.setToolTipText(tooltip);
+		}
+		return pill;
 	}
 
 	private void renderStatsMessage(final String message)
@@ -491,30 +725,6 @@ public class CollectivePanel extends PluginPanel
 		clanStatsBody.add(label);
 		clanStatsBody.revalidate();
 		clanStatsBody.repaint();
-	}
-
-	private JPanel statRow(final String label, final String value)
-	{
-		final JPanel row = new JPanel(new BorderLayout(PanelConstants.ICON_GAP, 0));
-		row.setBackground(PanelConstants.SURFACE);
-		row.setBorder(new EmptyBorder(PanelConstants.ROW_PADDING_Y, PanelConstants.ROW_PADDING_X,
-			PanelConstants.ROW_PADDING_Y, PanelConstants.ROW_PADDING_X));
-		row.add(CollectiveSwing.smallLabel(label, PanelConstants.TEXT_DIM), BorderLayout.WEST);
-		row.add(CollectiveSwing.smallLabel(value, PanelConstants.TEXT), BorderLayout.EAST);
-		row.setMaximumSize(new Dimension(Integer.MAX_VALUE, row.getPreferredSize().height));
-		return row;
-	}
-
-	private JPanel weeklyRow(final String label, final Double gained,
-		final List<ClanStats.Contributor> top)
-	{
-		final JPanel row = statRow(label, "+" + formatHours(gained));
-		final String tip = topTooltip(top);
-		if (tip != null)
-		{
-			row.setToolTipText(tip);
-		}
-		return row;
 	}
 
 	private static String topTooltip(final List<ClanStats.Contributor> top)
@@ -654,12 +864,24 @@ public class CollectivePanel extends PluginPanel
 
 		playtimeScroll = new JScrollPane(playtimeBody,
 			JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
-		playtimeScroll.setBorder(new EmptyBorder(0, 0, 0, 0));
+		playtimeScroll.setBorder(new MatteBorder(1, 1, 1, 1, PanelConstants.BORDER));
 		playtimeScroll.setBackground(PanelConstants.BG);
 		playtimeScroll.getViewport().setBackground(PanelConstants.BG);
 		playtimeScroll.getVerticalScrollBar().setUnitIncrement(12);
+		playtimeScroll.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-		playtimeSection = section(PanelConstants.SECTION_PLAYTIME, playtimeScroll);
+		final JLabel sub = CollectiveSwing.smallLabel(PanelConstants.PLAYTIME_SUBHEADER, PanelConstants.TEXT_DIM);
+		sub.setBorder(new EmptyBorder(0, 0, PanelConstants.ROW_GAP, 0));
+		sub.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+		final JPanel wrap = new JPanel();
+		wrap.setBackground(PanelConstants.BG);
+		wrap.setLayout(new BoxLayout(wrap, BoxLayout.Y_AXIS));
+		wrap.setBorder(new EmptyBorder(0, PanelConstants.ROW_PADDING_X, 0, PanelConstants.ROW_PADDING_X));
+		wrap.add(sub);
+		wrap.add(playtimeScroll);
+
+		playtimeSection = collapsibleSection(PanelConstants.SECTION_PLAYTIME, wrap, false);
 		playtimeSection.setVisible(false);
 		return playtimeSection;
 	}
@@ -732,7 +954,15 @@ public class CollectivePanel extends PluginPanel
 		final JLabel rankLabel = CollectiveSwing.smallLabel(rank + ".", PanelConstants.TEXT_DIM);
 		rankLabel.setPreferredSize(new Dimension(22, rankLabel.getPreferredSize().height));
 		row.add(rankLabel, BorderLayout.WEST);
-		row.add(CollectiveSwing.smallLabel(entry.getRsn(), PanelConstants.TEXT), BorderLayout.CENTER);
+
+		final boolean self = isSelf(entry.getRsn());
+		final JLabel rsn = CollectiveSwing.smallLabel(entry.getRsn(),
+			self ? PanelConstants.ACCENT : PanelConstants.TEXT);
+		if (self)
+		{
+			rsn.setFont(rsn.getFont().deriveFont(Font.BOLD));
+		}
+		row.add(rsn, BorderLayout.CENTER);
 		row.add(CollectiveSwing.smallLabel(formatPlaytime(entry.getSeconds()), PanelConstants.ACCENT),
 			BorderLayout.EAST);
 
@@ -770,7 +1000,7 @@ public class CollectivePanel extends PluginPanel
 	{
 		feedsBody.setBackground(PanelConstants.BG);
 		feedsBody.setLayout(new BoxLayout(feedsBody, BoxLayout.Y_AXIS));
-		return section(PanelConstants.SECTION_FEEDS, feedsBody);
+		return collapsibleSection(PanelConstants.SECTION_FEEDS, feedsBody, false);
 	}
 
 	private void refreshFeeds()
@@ -876,7 +1106,7 @@ public class CollectivePanel extends PluginPanel
 		body.add(controls);
 
 		refreshEvents();
-		return section(PanelConstants.SECTION_EVENTS, body);
+		return collapsibleSection(PanelConstants.SECTION_EVENTS, body, false);
 	}
 
 	private JButton flatButton(final String text)
@@ -973,14 +1203,13 @@ public class CollectivePanel extends PluginPanel
 			PanelConstants.ROW_PADDING_Y, PanelConstants.ROW_PADDING_X));
 		body.add(placeholder);
 
-		return section(PanelConstants.SECTION_SETUP, body);
+		return collapsibleSection(PanelConstants.SECTION_SETUP, body, true);
 	}
 
 	private JPanel buildFooter()
 	{
-		final JPanel footer = new JPanel();
+		final JPanel footer = new JPanel(new BorderLayout());
 		footer.setBackground(PanelConstants.BG);
-		footer.setLayout(new BoxLayout(footer, BoxLayout.Y_AXIS));
 		footer.setBorder(BorderFactory.createCompoundBorder(
 			new MatteBorder(PanelConstants.SEPARATOR_HEIGHT, 0, 0, 0, PanelConstants.BORDER),
 			new EmptyBorder(PanelConstants.HEADER_PADDING_Y, PanelConstants.HEADER_PADDING_X,
@@ -988,14 +1217,8 @@ public class CollectivePanel extends PluginPanel
 
 		final JLabel web = CollectiveSwing.smallLabel(PanelConstants.FOOTER_WEB_LABEL, PanelConstants.ACCENT);
 		CollectiveSwing.asLink(web, PanelConstants.FOOTER_WEB_URL, PanelConstants.ACCENT, PanelConstants.ACCENT_HOVER);
-		web.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-		final JPanel row = new JPanel(new BorderLayout());
-		row.setBackground(PanelConstants.BG);
-		row.setAlignmentX(Component.LEFT_ALIGNMENT);
-		row.add(web, BorderLayout.WEST);
-
-		footer.add(row);
+		footer.add(web, BorderLayout.WEST);
 		return footer;
 	}
 
@@ -1012,5 +1235,61 @@ public class CollectivePanel extends PluginPanel
 		wrapper.add(header, BorderLayout.NORTH);
 		wrapper.add(body, BorderLayout.CENTER);
 		return wrapper;
+	}
+
+	private JPanel collapsibleSection(final String title, final Component body, final boolean defaultCollapsed)
+	{
+		final JPanel wrapper = new JPanel(new BorderLayout());
+		wrapper.setBackground(PanelConstants.BG);
+		wrapper.setBorder(new EmptyBorder(PanelConstants.SECTION_GAP, 0, 0, 0));
+
+		final JLabel header = CollectiveSwing.smallLabel("", PanelConstants.ACCENT);
+		header.setBorder(new EmptyBorder(PanelConstants.SECTION_HEADER_PADDING_Y, PanelConstants.HEADER_PADDING_X,
+			PanelConstants.SECTION_HEADER_PADDING_Y, PanelConstants.HEADER_PADDING_X));
+
+		final String key = collapseKey(title);
+		final boolean[] state = {loadCollapsed(key, defaultCollapsed)};
+		final Runnable apply = () ->
+		{
+			header.setText((state[0] ? PanelConstants.CHEVRON_COLLAPSED : PanelConstants.CHEVRON_EXPANDED)
+				+ "  " + title.toUpperCase());
+			body.setVisible(!state[0]);
+		};
+		apply.run();
+		CollectiveSwing.onClick(header, () ->
+		{
+			state[0] = !state[0];
+			saveCollapsed(key, state[0]);
+			apply.run();
+			wrapper.revalidate();
+			wrapper.repaint();
+		});
+
+		wrapper.add(header, BorderLayout.NORTH);
+		wrapper.add(body, BorderLayout.CENTER);
+		return wrapper;
+	}
+
+	private static String collapseKey(final String title)
+	{
+		return "collapsed" + title.replaceAll("[^A-Za-z0-9]", "");
+	}
+
+	private boolean loadCollapsed(final String key, final boolean fallback)
+	{
+		if (configManager == null)
+		{
+			return fallback;
+		}
+		final String raw = configManager.getConfiguration(CollectiveConfig.GROUP, key);
+		return raw == null ? fallback : Boolean.parseBoolean(raw.trim());
+	}
+
+	private void saveCollapsed(final String key, final boolean collapsed)
+	{
+		if (configManager != null)
+		{
+			configManager.setConfiguration(CollectiveConfig.GROUP, key, Boolean.toString(collapsed));
+		}
 	}
 }
