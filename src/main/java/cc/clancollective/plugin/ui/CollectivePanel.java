@@ -963,7 +963,7 @@ public class CollectivePanel extends PluginPanel
 			discoverBody.add(Box.createVerticalStrut(PanelConstants.ROW_GAP));
 		}
 
-		final int height = Math.min(discoverBody.getPreferredSize().height, PanelConstants.DISCOVER_MAX_HEIGHT);
+		final int height = discoverBody.getPreferredSize().height;
 		discoverScroll.setPreferredSize(new Dimension(0, height));
 		discoverScroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, height));
 

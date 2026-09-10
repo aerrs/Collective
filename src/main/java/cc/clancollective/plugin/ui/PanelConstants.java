@@ -62,7 +62,6 @@ public final class PanelConstants
 	public static final String DISCOVER_SEARCH_HINT = "Search clans…";
 	public static final String DISCOVER_OPEN = "View";
 	public static final String DISCOVER_COPY = "Copy CC";
-	public static final int DISCOVER_MAX_HEIGHT = 320;
 	public static final String CLANS_URL = "https://clancollective.cc/clans/";
 	public static final String SECTION_EVENTS = "Events";
 	public static final String SECTION_SETUP = "Setup";
