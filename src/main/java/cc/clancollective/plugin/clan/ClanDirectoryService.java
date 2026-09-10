@@ -153,6 +153,7 @@ public class ClanDirectoryService
 	private void finish(final String lookup, final List<ClanDirectoryEntry> result,
 		final Consumer<List<ClanDirectoryEntry>> callback)
 	{
+		final boolean report;
 		synchronized (lock)
 		{
 			inFlight = false;
@@ -164,8 +165,9 @@ public class ClanDirectoryService
 					cached = result;
 				}
 			}
+			report = result != null || cached == null;
 		}
-		if (result != null)
+		if (report)
 		{
 			callback.accept(result);
 		}

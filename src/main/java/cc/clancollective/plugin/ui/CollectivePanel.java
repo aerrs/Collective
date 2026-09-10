@@ -122,7 +122,6 @@ public class CollectivePanel extends PluginPanel
 	{
 		webhookClient.addHealthListener(healthListener);
 		refreshFeeds();
-		requestDiscover("");
 	}
 
 	public void onDeactivate()
@@ -226,6 +225,7 @@ public class CollectivePanel extends PluginPanel
 			clanBody.revalidate();
 			clanBody.repaint();
 			updateRoster(null);
+			setDiscoverVisible(true);
 			return;
 		}
 
@@ -233,6 +233,8 @@ public class CollectivePanel extends PluginPanel
 
 		clanBody.revalidate();
 		clanBody.repaint();
+
+		setDiscoverVisible(false);
 
 		updateRoster(snapshot);
 	}
@@ -917,13 +919,38 @@ public class CollectivePanel extends PluginPanel
 			SwingUtilities.invokeLater(() -> renderDiscover(entries)));
 	}
 
+	public void setDiscoverVisible(final boolean visible)
+	{
+		if (!SwingUtilities.isEventDispatchThread())
+		{
+			SwingUtilities.invokeLater(() -> setDiscoverVisible(visible));
+			return;
+		}
+		if (discoverSection == null)
+		{
+			return;
+		}
+		discoverSection.setVisible(visible);
+		if (visible && !discoverRendered)
+		{
+			requestDiscover(discoverSearch != null ? discoverSearch.getText() : "");
+		}
+		discoverSection.revalidate();
+		discoverSection.repaint();
+	}
+
 	private void renderDiscover(final List<ClanDirectoryEntry> entries)
 	{
 		if (discoverSection == null)
 		{
 			return;
 		}
-		if (entries == null || entries.isEmpty())
+		if (entries == null)
+		{
+			renderDiscoverMessage(PanelConstants.DISCOVER_ERROR);
+			return;
+		}
+		if (entries.isEmpty())
 		{
 			renderDiscoverMessage(PanelConstants.DISCOVER_EMPTY);
 			return;

@@ -64,6 +64,7 @@ public final class PanelConstants
 
 	public static final String DISCOVER_LOADING = "Loading clans from Clan Collective…";
 	public static final String DISCOVER_EMPTY = "No clans found. Try a different search.";
+	public static final String DISCOVER_ERROR = "Couldn't reach Clan Collective. Try again shortly.";
 	public static final String DISCOVER_SEARCH_HINT = "Search clans…";
 	public static final String DISCOVER_OPEN = "View";
 	public static final String DISCOVER_COPY = "Copy CC";
