@@ -7,7 +7,6 @@ import cc.clancollective.plugin.clan.ClanMemberEntry;
 import cc.clancollective.plugin.clan.ClanSnapshot;
 import cc.clancollective.plugin.clan.ClanStats;
 import cc.clancollective.plugin.events.EventRecorder;
-import cc.clancollective.plugin.net.WebhookClient;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
@@ -15,6 +14,7 @@ import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.GridLayout;
+import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
@@ -39,6 +39,7 @@ import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextField;
+import javax.swing.Scrollable;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
@@ -53,10 +54,8 @@ public class CollectivePanel extends PluginPanel
 {
 	private final CollectiveConfig config;
 	private final ConfigManager configManager;
-	private final WebhookClient webhookClient;
 	private final EventRecorder recorder;
 	private volatile String localRsn;
-	private final JPanel feedsBody = new JPanel();
 	private final JPanel clanBody = new JPanel();
 	private final JPanel rosterBody = new JPanel();
 	private JPanel rosterSection;
@@ -69,27 +68,26 @@ public class CollectivePanel extends PluginPanel
 	private final JPanel clanStatsBody = new JPanel();
 	private JPanel clanStatsSection;
 	private boolean clanStatsRendered;
-	private final JPanel discoverBody = new JPanel();
+	private final JPanel discoverBody = new WidthTrackingPanel();
 	private JPanel discoverSection;
 	private JScrollPane discoverScroll;
 	private JTextField discoverSearch;
 	private boolean discoverRendered;
 	private final ClanDirectoryService discoverService;
-	private final Runnable healthListener = this::onHealthChanged;
 
+	private JPanel eventsSection;
+	private JPanel setupSection;
 	private JButton eventToggle;
 	private JButton eventCopy;
 	private JButton eventReset;
 	private JLabel eventStatus;
 
 	public CollectivePanel(final CollectiveConfig config, final ConfigManager configManager,
-		final WebhookClient webhookClient, final EventRecorder recorder,
-		final ClanDirectoryService discoverService)
+		final EventRecorder recorder, final ClanDirectoryService discoverService)
 	{
 		super(true);
 		this.config = config;
 		this.configManager = configManager;
-		this.webhookClient = webhookClient;
 		this.recorder = recorder;
 		this.discoverService = discoverService;
 
@@ -108,25 +106,12 @@ public class CollectivePanel extends PluginPanel
 		content.add(buildClanStatsSection());
 		content.add(buildDiscoverSection());
 		content.add(buildEventsSection());
-		content.add(buildFeedsSection());
 		content.add(buildSetupSection());
 		content.add(buildFooter());
 
 		add(content, BorderLayout.NORTH);
 
-		refreshFeeds();
 		updateClan(ClanSnapshot.EMPTY);
-	}
-
-	public void onActivate()
-	{
-		webhookClient.addHealthListener(healthListener);
-		refreshFeeds();
-	}
-
-	public void onDeactivate()
-	{
-		webhookClient.removeHealthListener(healthListener);
 	}
 
 	public void setLocalRsn(final String rsn)
@@ -226,6 +211,7 @@ public class CollectivePanel extends PluginPanel
 			clanBody.repaint();
 			updateRoster(null);
 			setDiscoverVisible(true);
+			setClanToolsVisible(false);
 			return;
 		}
 
@@ -235,6 +221,7 @@ public class CollectivePanel extends PluginPanel
 		clanBody.repaint();
 
 		setDiscoverVisible(false);
+		setClanToolsVisible(true);
 
 		updateRoster(snapshot);
 	}
@@ -890,6 +877,7 @@ public class CollectivePanel extends PluginPanel
 		final JPanel searchWrap = new JPanel(new BorderLayout());
 		searchWrap.setBackground(PanelConstants.BG);
 		searchWrap.setBorder(new EmptyBorder(0, 0, PanelConstants.ROW_GAP, 0));
+		searchWrap.setAlignmentX(Component.LEFT_ALIGNMENT);
 		searchWrap.add(discoverSearch, BorderLayout.CENTER);
 		searchWrap.setMaximumSize(new Dimension(Integer.MAX_VALUE,
 			discoverSearch.getPreferredSize().height + PanelConstants.ROW_GAP));
@@ -917,6 +905,18 @@ public class CollectivePanel extends PluginPanel
 		}
 		discoverService.request(query, entries ->
 			SwingUtilities.invokeLater(() -> renderDiscover(entries)));
+	}
+
+	private void setClanToolsVisible(final boolean visible)
+	{
+		if (eventsSection != null)
+		{
+			eventsSection.setVisible(visible);
+		}
+		if (setupSection != null)
+		{
+			setupSection.setVisible(visible);
+		}
 	}
 
 	public void setDiscoverVisible(final boolean visible)
@@ -1078,81 +1078,37 @@ public class CollectivePanel extends PluginPanel
 		return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
 	}
 
-	private JPanel buildFeedsSection()
+	private static final class WidthTrackingPanel extends JPanel implements Scrollable
 	{
-		feedsBody.setBackground(PanelConstants.BG);
-		feedsBody.setLayout(new BoxLayout(feedsBody, BoxLayout.Y_AXIS));
-		return collapsibleSection(PanelConstants.SECTION_FEEDS, feedsBody, false);
-	}
-
-	private void refreshFeeds()
-	{
-		feedsBody.removeAll();
-
-		int shown = 0;
-		shown += addFeedRow("Clan chat", config.chatWebhook());
-		shown += addFeedRow("Clan admin", config.clanAdminWebhook());
-
-		if (shown == 0)
+		@Override
+		public Dimension getPreferredScrollableViewportSize()
 		{
-			final JLabel empty = CollectiveSwing.smallLabel(
-				"<html><body style='width:150px'>" + PanelConstants.NO_FEEDS_TEXT + "</body></html>",
-				PanelConstants.TEXT_DIM);
-			empty.setBorder(new EmptyBorder(PanelConstants.ROW_PADDING_Y, PanelConstants.ROW_PADDING_X,
-				PanelConstants.ROW_PADDING_Y, PanelConstants.ROW_PADDING_X));
-			feedsBody.add(empty);
+			return getPreferredSize();
 		}
 
-		feedsBody.revalidate();
-		feedsBody.repaint();
-	}
-
-	private int addFeedRow(final String name, final String webhookValue)
-	{
-		if (webhookValue.trim().isEmpty())
+		@Override
+		public int getScrollableUnitIncrement(final Rectangle visibleRect, final int orientation, final int direction)
 		{
-			return 0;
+			return 12;
 		}
-		feedsBody.add(feedRow(name, firstHealth(webhookValue)));
-		feedsBody.add(javax.swing.Box.createVerticalStrut(PanelConstants.ROW_GAP));
-		return 1;
-	}
 
-	private cc.clancollective.plugin.net.WebhookHealth firstHealth(final String webhookValue)
-	{
-		final String first = webhookValue.trim().split("\\R", 2)[0].trim();
-		return webhookClient.healthFor(first);
-	}
+		@Override
+		public int getScrollableBlockIncrement(final Rectangle visibleRect, final int orientation, final int direction)
+		{
+			return 60;
+		}
 
-	private JPanel feedRow(final String name, final cc.clancollective.plugin.net.WebhookHealth health)
-	{
-		final JPanel row = new JPanel(new BorderLayout(PanelConstants.ICON_GAP, 0));
-		row.setBackground(PanelConstants.SURFACE);
-		row.setBorder(new EmptyBorder(PanelConstants.ROW_PADDING_Y, PanelConstants.ROW_PADDING_X,
-			PanelConstants.ROW_PADDING_Y, PanelConstants.ROW_PADDING_X));
+		@Override
+		public boolean getScrollableTracksViewportWidth()
+		{
+			return true;
+		}
 
-		final StatusDot dot = new StatusDot(PanelConstants.STATUS_DOT_DIAMETER);
-		dot.setColor(CollectiveSwing.statusColor(health.getState()));
-
-		final JPanel dotWrap = new JPanel(new BorderLayout());
-		dotWrap.setOpaque(false);
-		dotWrap.add(dot, BorderLayout.CENTER);
-		dotWrap.setPreferredSize(new Dimension(
-			PanelConstants.STATUS_DOT_DIAMETER + 2, PanelConstants.STATUS_DOT_DIAMETER + 2));
-
-		row.add(dotWrap, BorderLayout.WEST);
-		row.add(CollectiveSwing.smallLabel(name, PanelConstants.TEXT), BorderLayout.CENTER);
-		return row;
-	}
-
-	private void onHealthChanged()
-	{
-		SwingUtilities.invokeLater(this::refreshFeeds);
-	}
-
-	public void refreshFeedHealth()
-	{
-		SwingUtilities.invokeLater(this::refreshFeeds);
+		@Override
+		public boolean getScrollableTracksViewportHeight()
+		{
+			return false;
+		}
 	}
 
 	private JPanel buildEventsSection()
@@ -1188,7 +1144,8 @@ public class CollectivePanel extends PluginPanel
 		body.add(controls);
 
 		refreshEvents();
-		return collapsibleSection(PanelConstants.SECTION_EVENTS, body, false);
+		eventsSection = collapsibleSection(PanelConstants.SECTION_EVENTS, body, false);
+		return eventsSection;
 	}
 
 	private JButton flatButton(final String text)
@@ -1285,7 +1242,8 @@ public class CollectivePanel extends PluginPanel
 			PanelConstants.ROW_PADDING_Y, PanelConstants.ROW_PADDING_X));
 		body.add(placeholder);
 
-		return collapsibleSection(PanelConstants.SECTION_SETUP, body, true);
+		setupSection = collapsibleSection(PanelConstants.SECTION_SETUP, body, true);
+		return setupSection;
 	}
 
 	private JPanel buildFooter()

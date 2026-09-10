@@ -25,11 +25,6 @@ public final class PanelConstants
 
 	public static final Color TEXT_DIM = ColorScheme.LIGHT_GRAY_COLOR;
 
-	public static final Color STATUS_OK = ColorScheme.PROGRESS_COMPLETE_COLOR;
-	public static final Color STATUS_WARN = ColorScheme.BRAND_ORANGE;
-	public static final Color STATUS_ERROR = ColorScheme.PROGRESS_ERROR_COLOR;
-	public static final Color STATUS_UNKNOWN = ColorScheme.MEDIUM_GRAY_COLOR;
-
 	public static final int PANEL_PADDING = 10;
 	public static final int HEADER_PADDING_Y = 8;
 	public static final int HEADER_PADDING_X = 10;
@@ -40,7 +35,6 @@ public final class PanelConstants
 	public static final int ROW_GAP = 4;
 	public static final int ICON_GAP = 8;
 	public static final int SEPARATOR_HEIGHT = 1;
-	public static final int STATUS_DOT_DIAMETER = 8;
 	public static final int HEADER_ICON_SIZE = 24;
 
 	public static final String CHEVRON_EXPANDED = "\u25be";
@@ -70,7 +64,6 @@ public final class PanelConstants
 	public static final String DISCOVER_COPY = "Copy CC";
 	public static final int DISCOVER_MAX_HEIGHT = 320;
 	public static final String CLANS_URL = "https://clancollective.cc/clans/";
-	public static final String SECTION_FEEDS = "Feed health";
 	public static final String SECTION_EVENTS = "Events";
 	public static final String SECTION_SETUP = "Setup";
 
@@ -109,9 +102,6 @@ public final class PanelConstants
 			+ "Clan Collective directory from here.<br><br>"
 			+ "Add Discord webhook URLs for the <b>Clan chat</b> and <b>Clan admin</b> feeds to relay them, "
 			+ "then use <b>Events</b> to log attendance.";
-
-	public static final String NO_FEEDS_TEXT =
-		"No webhooks configured yet. Add one in the plugin settings to see its status here.";
 
 	public static final String FOOTER_WEB_LABEL = "clancollective.cc";
 	public static final String FOOTER_WEB_URL = "https://clancollective.cc";
