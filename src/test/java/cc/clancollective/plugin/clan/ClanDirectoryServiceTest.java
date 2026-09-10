@@ -1,6 +1,5 @@
-package cc.clancollective.plugin.playtime;
+package cc.clancollective.plugin.clan;
 
-import cc.clancollective.plugin.CollectiveConfig;
 import com.google.gson.Gson;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
@@ -25,11 +24,11 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-public class PlaytimeServiceTest
+public class ClanDirectoryServiceTest
 {
 	private OkHttpClient httpClient;
 	private Call call;
-	private PlaytimeService service;
+	private ClanDirectoryService service;
 
 	@Before
 	public void setUp()
@@ -40,11 +39,9 @@ public class PlaytimeServiceTest
 		when(builder.followRedirects(anyBoolean())).thenReturn(builder);
 		when(builder.followSslRedirects(anyBoolean())).thenReturn(builder);
 		when(builder.build()).thenReturn(httpClient);
-		final CollectiveConfig config = mock(CollectiveConfig.class);
-		when(config.playtimeBackendUrl()).thenReturn("https://clancollective.cc");
 		call = mock(Call.class);
 		when(httpClient.newCall(any())).thenReturn(call);
-		service = new PlaytimeService(httpClient, new Gson(), config);
+		service = new ClanDirectoryService(httpClient, new Gson());
 	}
 
 	private void respond(final int code, final String body)
@@ -62,68 +59,56 @@ public class PlaytimeServiceTest
 		}).when(call).enqueue(any());
 	}
 
-	private List<PlaytimeEntry> requestOnce(final String clan)
+	private List<ClanDirectoryEntry> requestOnce(final String query)
 	{
-		final AtomicReference<List<PlaytimeEntry>> got = new AtomicReference<>();
-		service.request(clan, "", got::set);
+		final AtomicReference<List<ClanDirectoryEntry>> got = new AtomicReference<>();
+		service.request(query, got::set);
 		return got.get();
 	}
 
 	@Test
-	public void parsesAndOrdersEntries()
+	public void parsesClans()
 	{
-		respond(200, "{\"ok\":true,\"entries\":[{\"rsn\":\"Alice\",\"seconds\":900},{\"rsn\":\"Bob\",\"seconds\":100}]}");
-		final List<PlaytimeEntry> entries = requestOnce("The Highlanders");
-		assertNotNull(entries);
-		assertEquals(2, entries.size());
-		assertEquals("Alice", entries.get(0).getRsn());
-		assertEquals(900, entries.get(0).getSeconds());
-	}
-
-	@Test
-	public void cachesWithinRefreshWindow()
-	{
-		respond(200, "{\"ok\":true,\"entries\":[{\"rsn\":\"A\",\"seconds\":1}]}");
-		service.request("Clan", "", e -> { });
-		service.request("Clan", "", e -> { });
-		verify(httpClient, times(1)).newCall(any());
-	}
-
-	@Test
-	public void refetchesWhenClanChanges()
-	{
-		respond(200, "{\"ok\":true,\"entries\":[]}");
-		service.request("Clan A", "", e -> { });
-		service.request("Clan B", "", e -> { });
-		verify(httpClient, times(2)).newCall(any());
-	}
-
-	@Test
-	public void errorResponseYieldsNoData()
-	{
-		respond(500, "");
-		assertNull(requestOnce("Clan"));
-	}
-
-	@Test
-	public void malformedJsonYieldsNoData()
-	{
-		respond(200, "not json");
-		assertNull(requestOnce("Clan"));
+		respond(200, "{\"ok\":true,\"clans\":[{\"name\":\"Alpha\",\"slug\":\"alpha\",\"blurb\":\"hi\","
+			+ "\"region\":\"EU\",\"recruitment\":\"open\",\"members\":120,\"cc\":\"Alpha CC\"}]}");
+		final List<ClanDirectoryEntry> out = requestOnce("");
+		assertNotNull(out);
+		assertEquals(1, out.size());
+		assertEquals("Alpha", out.get(0).getName());
+		assertEquals("alpha", out.get(0).getSlug());
+		assertEquals(120, out.get(0).getMembers());
+		assertEquals("Alpha CC", out.get(0).getCc());
 	}
 
 	@Test
 	public void notOkYieldsNoData()
 	{
 		respond(200, "{\"ok\":false}");
-		assertNull(requestOnce("Clan"));
+		assertNull(requestOnce(""));
 	}
 
 	@Test
-	public void blankClanAndSlugDoesNothing()
+	public void errorResponseYieldsNoData()
 	{
-		respond(200, "{\"ok\":true,\"entries\":[]}");
-		service.request("", "", e -> { });
-		verify(httpClient, times(0)).newCall(any());
+		respond(500, "");
+		assertNull(requestOnce(""));
+	}
+
+	@Test
+	public void cachesWithinRefreshWindow()
+	{
+		respond(200, "{\"ok\":true,\"clans\":[]}");
+		service.request("", e -> { });
+		service.request("", e -> { });
+		verify(httpClient, times(1)).newCall(any());
+	}
+
+	@Test
+	public void refetchesWhenQueryChanges()
+	{
+		respond(200, "{\"ok\":true,\"clans\":[]}");
+		service.request("a", e -> { });
+		service.request("b", e -> { });
+		verify(httpClient, times(2)).newCall(any());
 	}
 }

@@ -41,13 +41,6 @@ public interface CollectiveConfig extends Config
 	)
 	String SECTION_CLAN_STATS = "clanStats";
 
-	@ConfigSection(
-		name = "Playtime",
-		description = "Track your logged-in playtime and show a clan leaderboard, via Clan Collective.",
-		position = 8
-	)
-	String SECTION_PLAYTIME = "playtime";
-
 	@Range(min = 1, max = 60)
 	@ConfigItem(
 		keyName = "networkTimeout",
@@ -245,47 +238,5 @@ public interface CollectiveConfig extends Config
 	default String clanCollectiveSlug()
 	{
 		return "";
-	}
-
-	@ConfigItem(
-		keyName = "playtimeEnabled",
-		name = "Track playtime",
-		description = "Send your logged-in playtime to Clan Collective and show your clan's playtime leaderboard "
-			+ "in the side panel. Requires a playtime token from your clan's Clan Collective dashboard.",
-		warning = "This feature sends your RuneScape name, your unique account identifier (account hash), "
-			+ "your clan's name or Clan Collective slug, and your logged-in playtime — along with your IP address — "
-			+ "to Clan Collective (clancollective.cc), a 3rd-party server not controlled or verified by RuneLite developers.",
-		section = SECTION_PLAYTIME,
-		position = 0
-	)
-	default boolean playtimeEnabled()
-	{
-		return false;
-	}
-
-	@ConfigItem(
-		keyName = "playtimeToken",
-		name = "Playtime token",
-		secret = true,
-		description = "The playtime token from your clan's Clan Collective dashboard (Edit clan → Plugin & Playtime). "
-			+ "Without a valid token, playtime submissions are rejected.",
-		section = SECTION_PLAYTIME,
-		position = 1
-	)
-	default String playtimeToken()
-	{
-		return "";
-	}
-
-	@ConfigItem(
-		keyName = "playtimeBackendUrl",
-		name = "Backend URL",
-		description = "Base URL of the Clan Collective server that stores playtime. Leave as the default unless you self-host.",
-		section = SECTION_PLAYTIME,
-		position = 2
-	)
-	default String playtimeBackendUrl()
-	{
-		return "https://clancollective.cc";
 	}
 }

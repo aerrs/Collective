@@ -1,6 +1,5 @@
-package cc.clancollective.plugin.playtime;
+package cc.clancollective.plugin.clan;
 
-import cc.clancollective.plugin.CollectiveConfig;
 import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
 import java.io.IOException;
@@ -11,7 +10,6 @@ import java.util.function.Consumer;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.extern.slf4j.Slf4j;
-import net.runelite.client.util.Text;
 import okhttp3.Call;
 import okhttp3.Callback;
 import okhttp3.HttpUrl;
@@ -21,48 +19,39 @@ import okhttp3.Response;
 
 @Slf4j
 @Singleton
-public class PlaytimeService
+public class ClanDirectoryService
 {
+	private static final String BASE_URL = "https://clancollective.cc";
 	private static final String USER_AGENT = "Collective RuneLite Plugin";
 	private static final long REFRESH_MS = 300_000L;
-	private static final long ERROR_RETRY_MS = 60_000L;
-	private static final int WINDOW_DAYS = 7;
+	private static final long ERROR_RETRY_MS = 30_000L;
+	private static final int LIMIT = 100;
 
 	private final OkHttpClient httpClient;
 	private final Gson gson;
-	private final CollectiveConfig config;
 
 	private final Object lock = new Object();
 	private String key;
-	private List<PlaytimeEntry> cached;
+	private List<ClanDirectoryEntry> cached;
 	private long nextAllowedMs;
 	private boolean inFlight;
 
 	@Inject
-	public PlaytimeService(final OkHttpClient runeliteClient, final Gson gson, final CollectiveConfig config)
+	public ClanDirectoryService(final OkHttpClient runeliteClient, final Gson gson)
 	{
+		this.gson = gson;
 		this.httpClient = runeliteClient.newBuilder()
 			.followRedirects(false)
 			.followSslRedirects(false)
 			.build();
-		this.gson = gson;
-		this.config = config;
 	}
 
-	public void request(final String clanName, final String slug, final Consumer<List<PlaytimeEntry>> callback)
+	public void request(final String query, final Consumer<List<ClanDirectoryEntry>> callback)
 	{
-		final String slugTrim = slug == null ? "" : slug.trim();
-		final boolean useSlug = !slugTrim.isEmpty();
-		final String nameTrim = clanName == null ? "" : clanName.trim();
-		if (!useSlug && nameTrim.isEmpty())
-		{
-			return;
-		}
+		final String q = query == null ? "" : query.trim();
+		final String lookup = "q=" + q.toLowerCase();
 
-		final String value = useSlug ? slugTrim : nameTrim;
-		final String lookup = (useSlug ? "slug=" : "cc=") + value.toLowerCase();
-
-		final List<PlaytimeEntry> toServe;
+		final List<ClanDirectoryEntry> toServe;
 		final boolean shouldFetch;
 		synchronized (lock)
 		{
@@ -86,27 +75,29 @@ public class PlaytimeService
 		}
 		if (shouldFetch)
 		{
-			fetch(lookup, useSlug, value, callback);
+			fetch(lookup, q, callback);
 		}
 	}
 
-	private void fetch(final String lookup, final boolean useSlug, final String value,
-		final Consumer<List<PlaytimeEntry>> callback)
+	private void fetch(final String lookup, final String query,
+		final Consumer<List<ClanDirectoryEntry>> callback)
 	{
-		final HttpUrl base = HttpUrl.parse(config.playtimeBackendUrl().trim());
-		if (base == null || !PlaytimeTracker.isSecure(base))
+		final HttpUrl base = HttpUrl.parse(BASE_URL);
+		if (base == null)
 		{
 			finish(lookup, null, callback);
 			return;
 		}
-		final HttpUrl url = base.newBuilder()
-			.addPathSegments("api/clan/playtime/leaderboard")
-			.addQueryParameter(useSlug ? "slug" : "cc", value)
-			.addQueryParameter("days", Integer.toString(WINDOW_DAYS))
-			.build();
+		final HttpUrl.Builder builder = base.newBuilder()
+			.addPathSegments("api/clans")
+			.addQueryParameter("limit", Integer.toString(LIMIT));
+		if (!query.isEmpty())
+		{
+			builder.addQueryParameter("q", query);
+		}
 
 		final Request request = new Request.Builder()
-			.url(url)
+			.url(builder.build())
 			.header("User-Agent", USER_AGENT)
 			.get()
 			.build();
@@ -116,7 +107,7 @@ public class PlaytimeService
 			@Override
 			public void onFailure(final Call call, final IOException e)
 			{
-				log.debug("Collective: playtime leaderboard request failed", e);
+				log.debug("Collective: clan directory request failed", e);
 				finish(lookup, null, callback);
 			}
 
@@ -128,7 +119,7 @@ public class PlaytimeService
 		});
 	}
 
-	private List<PlaytimeEntry> parse(final Response response)
+	private List<ClanDirectoryEntry> parse(final Response response)
 	{
 		try (Response r = response)
 		{
@@ -136,30 +127,31 @@ public class PlaytimeService
 			{
 				return null;
 			}
-			final LeaderboardResponse dto = gson.fromJson(r.body().charStream(), LeaderboardResponse.class);
-			if (dto == null || !dto.ok || dto.entries == null)
+			final DirectoryResponse dto = gson.fromJson(r.body().charStream(), DirectoryResponse.class);
+			if (dto == null || !dto.ok || dto.clans == null)
 			{
 				return null;
 			}
-			final List<PlaytimeEntry> out = new ArrayList<>();
-			for (final EntryDto e : dto.entries)
+			final List<ClanDirectoryEntry> out = new ArrayList<>();
+			for (final ClanDto c : dto.clans)
 			{
-				if (e != null && e.rsn != null)
+				if (c != null && c.name != null && c.slug != null)
 				{
-					out.add(new PlaytimeEntry(Text.toJagexName(e.rsn), Math.max(0, e.seconds)));
+					out.add(new ClanDirectoryEntry(c.name, c.slug, c.blurb, c.type,
+						c.region, c.recruitment, Math.max(0, c.members), c.cc));
 				}
 			}
 			return Collections.unmodifiableList(out);
 		}
 		catch (JsonSyntaxException | IllegalStateException e)
 		{
-			log.debug("Collective: playtime leaderboard parse failed", e);
+			log.debug("Collective: clan directory parse failed", e);
 			return null;
 		}
 	}
 
-	private void finish(final String lookup, final List<PlaytimeEntry> result,
-		final Consumer<List<PlaytimeEntry>> callback)
+	private void finish(final String lookup, final List<ClanDirectoryEntry> result,
+		final Consumer<List<ClanDirectoryEntry>> callback)
 	{
 		synchronized (lock)
 		{
@@ -179,15 +171,21 @@ public class PlaytimeService
 		}
 	}
 
-	private static final class LeaderboardResponse
+	private static final class DirectoryResponse
 	{
 		boolean ok;
-		List<EntryDto> entries;
+		List<ClanDto> clans;
 	}
 
-	private static final class EntryDto
+	private static final class ClanDto
 	{
-		String rsn;
-		long seconds;
+		String name;
+		String slug;
+		String blurb;
+		String type;
+		String region;
+		String recruitment;
+		int members;
+		String cc;
 	}
 }

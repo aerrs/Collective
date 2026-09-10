@@ -1,11 +1,12 @@
 package cc.clancollective.plugin.ui;
 
 import cc.clancollective.plugin.CollectiveConfig;
+import cc.clancollective.plugin.clan.ClanDirectoryEntry;
+import cc.clancollective.plugin.clan.ClanDirectoryService;
 import cc.clancollective.plugin.clan.ClanMemberEntry;
 import cc.clancollective.plugin.clan.ClanSnapshot;
 import cc.clancollective.plugin.clan.ClanStats;
 import cc.clancollective.plugin.events.EventRecorder;
-import cc.clancollective.plugin.playtime.PlaytimeEntry;
 import cc.clancollective.plugin.net.WebhookClient;
 import java.awt.BorderLayout;
 import java.awt.Component;
@@ -37,6 +38,7 @@ import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JTextField;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
@@ -45,6 +47,7 @@ import net.runelite.client.config.ConfigManager;
 import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.PluginPanel;
 import net.runelite.client.util.ImageUtil;
+import net.runelite.client.util.LinkBrowser;
 
 public class CollectivePanel extends PluginPanel
 {
@@ -66,10 +69,12 @@ public class CollectivePanel extends PluginPanel
 	private final JPanel clanStatsBody = new JPanel();
 	private JPanel clanStatsSection;
 	private boolean clanStatsRendered;
-	private final JPanel playtimeBody = new JPanel();
-	private JPanel playtimeSection;
-	private JScrollPane playtimeScroll;
-	private boolean playtimeRendered;
+	private final JPanel discoverBody = new JPanel();
+	private JPanel discoverSection;
+	private JScrollPane discoverScroll;
+	private JTextField discoverSearch;
+	private boolean discoverRendered;
+	private final ClanDirectoryService discoverService;
 	private final Runnable healthListener = this::onHealthChanged;
 
 	private JButton eventToggle;
@@ -78,13 +83,15 @@ public class CollectivePanel extends PluginPanel
 	private JLabel eventStatus;
 
 	public CollectivePanel(final CollectiveConfig config, final ConfigManager configManager,
-		final WebhookClient webhookClient, final EventRecorder recorder)
+		final WebhookClient webhookClient, final EventRecorder recorder,
+		final ClanDirectoryService discoverService)
 	{
 		super(true);
 		this.config = config;
 		this.configManager = configManager;
 		this.webhookClient = webhookClient;
 		this.recorder = recorder;
+		this.discoverService = discoverService;
 
 		setBackground(PanelConstants.BG);
 		setBorder(new EmptyBorder(0, 0, 0, 0));
@@ -99,7 +106,7 @@ public class CollectivePanel extends PluginPanel
 		content.add(buildClanSection());
 		content.add(buildRosterSection());
 		content.add(buildClanStatsSection());
-		content.add(buildPlaytimeSection());
+		content.add(buildDiscoverSection());
 		content.add(buildEventsSection());
 		content.add(buildFeedsSection());
 		content.add(buildSetupSection());
@@ -115,6 +122,7 @@ public class CollectivePanel extends PluginPanel
 	{
 		webhookClient.addHealthListener(healthListener);
 		refreshFeeds();
+		requestDiscover("");
 	}
 
 	public void onDeactivate()
@@ -857,143 +865,190 @@ public class CollectivePanel extends PluginPanel
 		return (hours / 24) + "d ago";
 	}
 
-	private JPanel buildPlaytimeSection()
+	private JPanel buildDiscoverSection()
 	{
-		playtimeBody.setBackground(PanelConstants.BG);
-		playtimeBody.setLayout(new BoxLayout(playtimeBody, BoxLayout.Y_AXIS));
+		discoverBody.setBackground(PanelConstants.BG);
+		discoverBody.setLayout(new BoxLayout(discoverBody, BoxLayout.Y_AXIS));
 
-		playtimeScroll = new JScrollPane(playtimeBody,
+		discoverScroll = new JScrollPane(discoverBody,
 			JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
-		playtimeScroll.setBorder(new MatteBorder(1, 1, 1, 1, PanelConstants.BORDER));
-		playtimeScroll.setBackground(PanelConstants.BG);
-		playtimeScroll.getViewport().setBackground(PanelConstants.BG);
-		playtimeScroll.getVerticalScrollBar().setUnitIncrement(12);
-		playtimeScroll.setAlignmentX(Component.LEFT_ALIGNMENT);
+		discoverScroll.setBorder(new MatteBorder(1, 1, 1, 1, PanelConstants.BORDER));
+		discoverScroll.setBackground(PanelConstants.BG);
+		discoverScroll.getViewport().setBackground(PanelConstants.BG);
+		discoverScroll.getVerticalScrollBar().setUnitIncrement(12);
+		discoverScroll.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-		final JLabel sub = CollectiveSwing.smallLabel(PanelConstants.PLAYTIME_SUBHEADER, PanelConstants.TEXT_DIM);
-		sub.setBorder(new EmptyBorder(0, 0, PanelConstants.ROW_GAP, 0));
-		sub.setAlignmentX(Component.LEFT_ALIGNMENT);
+		discoverSearch = new JTextField();
+		discoverSearch.setFont(FontManager.getRunescapeSmallFont());
+		discoverSearch.setBackground(PanelConstants.SURFACE);
+		discoverSearch.setForeground(PanelConstants.TEXT);
+		discoverSearch.setToolTipText(PanelConstants.DISCOVER_SEARCH_HINT);
+		discoverSearch.addActionListener(e -> requestDiscover(discoverSearch.getText()));
+
+		final JPanel searchWrap = new JPanel(new BorderLayout());
+		searchWrap.setBackground(PanelConstants.BG);
+		searchWrap.setBorder(new EmptyBorder(0, 0, PanelConstants.ROW_GAP, 0));
+		searchWrap.add(discoverSearch, BorderLayout.CENTER);
+		searchWrap.setMaximumSize(new Dimension(Integer.MAX_VALUE,
+			discoverSearch.getPreferredSize().height + PanelConstants.ROW_GAP));
 
 		final JPanel wrap = new JPanel();
 		wrap.setBackground(PanelConstants.BG);
 		wrap.setLayout(new BoxLayout(wrap, BoxLayout.Y_AXIS));
 		wrap.setBorder(new EmptyBorder(0, PanelConstants.ROW_PADDING_X, 0, PanelConstants.ROW_PADDING_X));
-		wrap.add(sub);
-		wrap.add(playtimeScroll);
+		wrap.add(searchWrap);
+		wrap.add(discoverScroll);
 
-		playtimeSection = collapsibleSection(PanelConstants.SECTION_PLAYTIME, wrap, false);
-		playtimeSection.setVisible(false);
-		return playtimeSection;
+		discoverSection = collapsibleSection(PanelConstants.SECTION_DISCOVER, wrap, false);
+		return discoverSection;
 	}
 
-	public void setPlaytimeVisible(final boolean visible)
+	public void requestDiscover(final String query)
 	{
-		if (!SwingUtilities.isEventDispatchThread())
-		{
-			SwingUtilities.invokeLater(() -> setPlaytimeVisible(visible));
-			return;
-		}
-		if (playtimeSection == null)
+		if (discoverService == null)
 		{
 			return;
 		}
-		if (visible && !playtimeRendered)
+		if (!discoverRendered)
 		{
-			renderPlaytimeMessage(PanelConstants.PLAYTIME_LOADING);
+			renderDiscoverMessage(PanelConstants.DISCOVER_LOADING);
 		}
-		if (!visible)
-		{
-			playtimeRendered = false;
-			playtimeBody.removeAll();
-		}
-		playtimeSection.setVisible(visible);
-		playtimeSection.revalidate();
-		playtimeSection.repaint();
+		discoverService.request(query, entries ->
+			SwingUtilities.invokeLater(() -> renderDiscover(entries)));
 	}
 
-	public void updatePlaytime(final List<PlaytimeEntry> entries)
+	private void renderDiscover(final List<ClanDirectoryEntry> entries)
 	{
-		if (!SwingUtilities.isEventDispatchThread())
-		{
-			SwingUtilities.invokeLater(() -> updatePlaytime(entries));
-			return;
-		}
-		if (playtimeSection == null || !playtimeSection.isVisible() || entries == null)
+		if (discoverSection == null)
 		{
 			return;
 		}
-		if (entries.isEmpty())
+		if (entries == null || entries.isEmpty())
 		{
-			renderPlaytimeMessage(PanelConstants.PLAYTIME_EMPTY);
+			renderDiscoverMessage(PanelConstants.DISCOVER_EMPTY);
 			return;
 		}
 
-		playtimeBody.removeAll();
-		int rank = 1;
-		for (final PlaytimeEntry entry : entries)
+		discoverBody.removeAll();
+		for (final ClanDirectoryEntry entry : entries)
 		{
-			playtimeBody.add(playtimeRow(rank++, entry));
+			discoverBody.add(discoverCard(entry));
+			discoverBody.add(Box.createVerticalStrut(PanelConstants.ROW_GAP));
 		}
 
-		final int height = Math.min(playtimeBody.getPreferredSize().height, PanelConstants.PLAYTIME_MAX_HEIGHT);
-		playtimeScroll.setPreferredSize(new Dimension(0, height));
-		playtimeScroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, height));
+		final int height = Math.min(discoverBody.getPreferredSize().height, PanelConstants.DISCOVER_MAX_HEIGHT);
+		discoverScroll.setPreferredSize(new Dimension(0, height));
+		discoverScroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, height));
 
-		playtimeRendered = true;
-		playtimeSection.revalidate();
-		playtimeSection.repaint();
+		discoverRendered = true;
+		discoverSection.revalidate();
+		discoverSection.repaint();
 	}
 
-	private JPanel playtimeRow(final int rank, final PlaytimeEntry entry)
+	private JPanel discoverCard(final ClanDirectoryEntry entry)
 	{
-		final JPanel row = new JPanel(new BorderLayout(PanelConstants.ICON_GAP, 0));
-		row.setBackground(PanelConstants.SURFACE);
-		row.setBorder(new EmptyBorder(PanelConstants.ROW_PADDING_Y, PanelConstants.ROW_PADDING_X,
-			PanelConstants.ROW_PADDING_Y, PanelConstants.ROW_PADDING_X));
+		final JPanel card = new JPanel();
+		card.setBackground(PanelConstants.SURFACE);
+		card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
+		card.setBorder(new EmptyBorder(PanelConstants.ROW_PADDING_Y + 2, PanelConstants.ROW_PADDING_X,
+			PanelConstants.ROW_PADDING_Y + 2, PanelConstants.ROW_PADDING_X));
 
-		final JLabel rankLabel = CollectiveSwing.smallLabel(rank + ".", PanelConstants.TEXT_DIM);
-		rankLabel.setPreferredSize(new Dimension(22, rankLabel.getPreferredSize().height));
-		row.add(rankLabel, BorderLayout.WEST);
+		final JLabel name = CollectiveSwing.smallLabel(entry.getName(), PanelConstants.ACCENT);
+		name.setFont(name.getFont().deriveFont(Font.BOLD));
+		name.setAlignmentX(Component.LEFT_ALIGNMENT);
+		card.add(name);
 
-		final boolean self = isSelf(entry.getRsn());
-		final JLabel rsn = CollectiveSwing.smallLabel(entry.getRsn(),
-			self ? PanelConstants.ACCENT : PanelConstants.TEXT);
-		if (self)
+		final String blurb = entry.getBlurb();
+		if (blurb != null && !blurb.trim().isEmpty())
 		{
-			rsn.setFont(rsn.getFont().deriveFont(Font.BOLD));
+			final JLabel blurbLabel = CollectiveSwing.smallLabel(
+				"<html><body style='width:150px'>" + htmlEscape(blurb) + "</body></html>",
+				PanelConstants.TEXT_DIM);
+			blurbLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+			card.add(Box.createVerticalStrut(2));
+			card.add(blurbLabel);
 		}
-		row.add(rsn, BorderLayout.CENTER);
-		row.add(CollectiveSwing.smallLabel(formatPlaytime(entry.getSeconds()), PanelConstants.ACCENT),
-			BorderLayout.EAST);
 
-		row.setMaximumSize(new Dimension(Integer.MAX_VALUE, row.getPreferredSize().height));
-		return row;
+		final String meta = discoverMeta(entry);
+		if (!meta.isEmpty())
+		{
+			final JLabel metaLabel = CollectiveSwing.smallLabel(meta, PanelConstants.TEXT_DIM);
+			metaLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+			card.add(Box.createVerticalStrut(2));
+			card.add(metaLabel);
+		}
+
+		card.add(Box.createVerticalStrut(PanelConstants.ROW_GAP));
+		card.add(discoverActions(entry));
+
+		card.setAlignmentX(Component.LEFT_ALIGNMENT);
+		card.setMaximumSize(new Dimension(Integer.MAX_VALUE, card.getPreferredSize().height));
+		return card;
 	}
 
-	private void renderPlaytimeMessage(final String message)
+	private JPanel discoverActions(final ClanDirectoryEntry entry)
 	{
-		playtimeBody.removeAll();
+		final JButton view = flatButton(PanelConstants.DISCOVER_OPEN);
+		CollectiveSwing.onClick(view, () -> LinkBrowser.browse(PanelConstants.CLANS_URL + entry.getSlug()));
+
+		final boolean hasCc = entry.getCc() != null && !entry.getCc().trim().isEmpty();
+		final JPanel actions = new JPanel(new GridLayout(1, hasCc ? 2 : 1, PanelConstants.ROW_GAP, 0));
+		actions.setBackground(PanelConstants.SURFACE);
+		actions.setAlignmentX(Component.LEFT_ALIGNMENT);
+		actions.add(view);
+		if (hasCc)
+		{
+			final JButton copy = flatButton(PanelConstants.DISCOVER_COPY);
+			CollectiveSwing.onClick(copy, () -> copyToClipboard(entry.getCc()));
+			actions.add(copy);
+		}
+		actions.setMaximumSize(new Dimension(Integer.MAX_VALUE, view.getPreferredSize().height));
+		return actions;
+	}
+
+	private static String discoverMeta(final ClanDirectoryEntry entry)
+	{
+		final List<String> parts = new ArrayList<>();
+		if (entry.getRegion() != null && !entry.getRegion().trim().isEmpty())
+		{
+			parts.add(entry.getRegion());
+		}
+		if (entry.getMembers() > 0)
+		{
+			parts.add(entry.getMembers() + " members");
+		}
+		if (entry.getRecruitment() != null && !entry.getRecruitment().trim().isEmpty())
+		{
+			parts.add(entry.getRecruitment());
+		}
+		return String.join("  ·  ", parts);
+	}
+
+	private void renderDiscoverMessage(final String message)
+	{
+		discoverBody.removeAll();
 		final JLabel label = CollectiveSwing.smallLabel(
 			"<html><body style='width:150px'>" + message + "</body></html>", PanelConstants.TEXT_DIM);
 		label.setBorder(new EmptyBorder(PanelConstants.ROW_PADDING_Y, PanelConstants.ROW_PADDING_X,
 			PanelConstants.ROW_PADDING_Y, PanelConstants.ROW_PADDING_X));
-		playtimeBody.add(label);
-		playtimeScroll.setPreferredSize(null);
-		playtimeScroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
-		playtimeSection.revalidate();
-		playtimeSection.repaint();
+		discoverBody.add(label);
+		discoverScroll.setPreferredSize(null);
+		discoverScroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
+		discoverSection.revalidate();
+		discoverSection.repaint();
 	}
 
-	private static String formatPlaytime(final long seconds)
+	private static void copyToClipboard(final String text)
 	{
-		final long totalMinutes = Math.max(0, seconds) / 60;
-		final long hours = totalMinutes / 60;
-		final long minutes = totalMinutes % 60;
-		if (hours > 0)
+		if (text != null && !text.isEmpty())
 		{
-			return hours + "h " + minutes + "m";
+			Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(text), null);
 		}
-		return minutes + "m";
+	}
+
+	private static String htmlEscape(final String s)
+	{
+		return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
 	}
 
 	private JPanel buildFeedsSection()
