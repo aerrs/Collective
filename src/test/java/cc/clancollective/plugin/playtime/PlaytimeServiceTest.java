@@ -18,6 +18,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -34,6 +35,11 @@ public class PlaytimeServiceTest
 	public void setUp()
 	{
 		httpClient = mock(OkHttpClient.class);
+		final OkHttpClient.Builder builder = mock(OkHttpClient.Builder.class);
+		when(httpClient.newBuilder()).thenReturn(builder);
+		when(builder.followRedirects(anyBoolean())).thenReturn(builder);
+		when(builder.followSslRedirects(anyBoolean())).thenReturn(builder);
+		when(builder.build()).thenReturn(httpClient);
 		final CollectiveConfig config = mock(CollectiveConfig.class);
 		when(config.playtimeBackendUrl()).thenReturn("https://clancollective.cc");
 		call = mock(Call.class);

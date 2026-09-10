@@ -3,29 +3,59 @@ package cc.clancollective.plugin.playtime;
 import cc.clancollective.plugin.CollectiveConfig;
 import com.google.gson.Gson;
 import net.runelite.api.Client;
+import net.runelite.api.GameState;
 import net.runelite.client.config.ConfigManager;
+import okhttp3.HttpUrl;
 import okhttp3.OkHttpClient;
 import org.junit.Before;
 import org.junit.Test;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 public class PlaytimeTrackerTest
 {
 	private ConfigManager configManager;
+	private Client client;
+	private CollectiveConfig config;
 	private PlaytimeTracker tracker;
 
 	@Before
 	public void setUp()
 	{
-		final Client client = mock(Client.class);
-		final CollectiveConfig config = mock(CollectiveConfig.class);
+		client = mock(Client.class);
+		config = mock(CollectiveConfig.class);
 		configManager = mock(ConfigManager.class);
 		when(configManager.getConfiguration(CollectiveConfig.GROUP, PlaytimeTracker.UNSENT_KEY))
 			.thenReturn(null);
 
-		tracker = new PlaytimeTracker(client, config, configManager, mock(OkHttpClient.class), new Gson());
+		tracker = new PlaytimeTracker(client, config, configManager, new OkHttpClient(), new Gson());
+	}
+
+	@Test
+	public void rejectsInsecureBackendButAllowsHttpsAndLocalhost()
+	{
+		assertTrue(PlaytimeTracker.isSecure(HttpUrl.parse("https://clancollective.cc")));
+		assertTrue(PlaytimeTracker.isSecure(HttpUrl.parse("http://localhost:8080")));
+		assertTrue(PlaytimeTracker.isSecure(HttpUrl.parse("http://127.0.0.1:5000")));
+		assertFalse(PlaytimeTracker.isSecure(HttpUrl.parse("http://evil.example.com")));
+		assertFalse(PlaytimeTracker.isSecure(null));
+	}
+
+	@Test
+	public void disabledFeatureDoesNotAccrue()
+	{
+		when(config.playtimeEnabled()).thenReturn(false);
+		when(client.getGameState()).thenReturn(GameState.LOGGED_IN);
+
+		tracker.onLogin();
+		tracker.onGameTick();
+		tracker.onGameTick();
+		tracker.onLogout();
+
+		assertEquals(0, tracker.pendingSeconds());
 	}
 
 	@Test
@@ -106,7 +136,7 @@ public class PlaytimeTrackerTest
 		when(configManager.getConfiguration(CollectiveConfig.GROUP, PlaytimeTracker.UNSENT_KEY))
 			.thenReturn("[{\"clan\":\"Clan\",\"rsn\":\"Tester\",\"seconds\":42}]");
 		final PlaytimeTracker restored = new PlaytimeTracker(mock(Client.class), mock(CollectiveConfig.class),
-			configManager, mock(OkHttpClient.class), new Gson());
+			configManager, new OkHttpClient(), new Gson());
 		assertEquals(42, restored.pendingSeconds());
 		assertEquals(42, restored.pendingSeconds("Clan", "Tester"));
 	}
@@ -117,7 +147,7 @@ public class PlaytimeTrackerTest
 		when(configManager.getConfiguration(CollectiveConfig.GROUP, PlaytimeTracker.UNSENT_KEY))
 			.thenReturn("42");
 		final PlaytimeTracker restored = new PlaytimeTracker(mock(Client.class), mock(CollectiveConfig.class),
-			configManager, mock(OkHttpClient.class), new Gson());
+			configManager, new OkHttpClient(), new Gson());
 		assertEquals(0, restored.pendingSeconds());
 	}
 }

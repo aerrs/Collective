@@ -6,7 +6,7 @@ Clan tools and Discord integration for OSRS clans. Shows your clan in an in-clie
 
 - **Clan panel** — an in-client side panel showing your clan name, your rank, online/total member counts, and a scrollable roster of every member with their in-game rank icons. Built from the game's own clan data; no network.
 - **Clan stats** — your clan's EHP, EHB, total XP and member count, shown in the panel and read from [Clan Collective](https://clancollective.cc) (which sources them from Wise Old Man / TempleOSRS). Opt-in; sends only your clan name or slug, reads back aggregate figures.
-- **Playtime** — optionally tracks your logged-in time and shows your clan's playtime leaderboard in the panel. Sends your name, clan, and elapsed time to Clan Collective using a token your clan generates. Off until you enable it and paste the token.
+- **Playtime** — optionally tracks your logged-in time and shows your clan's playtime leaderboard (last 7 days) in the panel. Sends your name, your unique account identifier (account hash), clan, and elapsed time to Clan Collective using a token your clan generates. Off until you enable it and paste the token.
 - **Clan chat relay** — clan channel messages (with sender name and rank) and clan broadcasts, posted to a Discord webhook.
 - **Clan administration** — applications, invites, joins, leaves, and rank changes, posted to a Discord webhook.
 - **Event attendance** — a side-panel tool that records which clan members appear near you during an event, copyable to your clipboard.
@@ -31,7 +31,7 @@ What each feature transmits when enabled:
 | Rank changes | Clan name, member name, old and new rank | Discord webhook | Yes |
 | Event attendance | Observed clan member names, event duration | Clipboard only | Yes |
 | Clan stats panel | Your clan name or slug (read-only lookup) | Clan Collective | No |
-| Playtime | Your name, clan name/slug, elapsed logged-in time, token | Clan Collective | No |
+| Playtime | Your name, unique account identifier (account hash), clan name/slug, elapsed logged-in time, token, IP address | Clan Collective | No |
 
 The clan panel and roster read only the game's own clan data and make no network requests. Rank-change tracking stores a local snapshot of member ranks while that feature is enabled, purely to detect changes on your own client.
 

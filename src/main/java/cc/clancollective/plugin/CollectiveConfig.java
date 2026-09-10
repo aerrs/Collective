@@ -252,7 +252,9 @@ public interface CollectiveConfig extends Config
 		name = "Track playtime",
 		description = "Send your logged-in playtime to Clan Collective and show your clan's playtime leaderboard "
 			+ "in the side panel. Requires a playtime token from your clan's Clan Collective dashboard.",
-		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
+		warning = "This feature sends your RuneScape name, your unique account identifier (account hash), "
+			+ "your clan's name or Clan Collective slug, and your logged-in playtime — along with your IP address — "
+			+ "to Clan Collective (clancollective.cc), a 3rd-party server not controlled or verified by RuneLite developers.",
 		section = SECTION_PLAYTIME,
 		position = 0
 	)

@@ -63,7 +63,10 @@ public class PlaytimeTracker
 		this.client = client;
 		this.config = config;
 		this.configManager = configManager;
-		this.httpClient = runeliteClient;
+		this.httpClient = runeliteClient.newBuilder()
+			.followRedirects(false)
+			.followSslRedirects(false)
+			.build();
 		this.gson = gson;
 		loadPending();
 	}
@@ -88,10 +91,6 @@ public class PlaytimeTracker
 
 	public void onGameTick()
 	{
-		if (!config.playtimeEnabled())
-		{
-			return;
-		}
 		if (client.getGameState() != GameState.LOGGED_IN)
 		{
 			return;
@@ -109,6 +108,11 @@ public class PlaytimeTracker
 
 	private void tick()
 	{
+		if (!config.playtimeEnabled())
+		{
+			lastAccrualMs = -1;
+			return;
+		}
 		final long now = System.currentTimeMillis();
 		if (lastAccrualMs < 0)
 		{
@@ -204,7 +208,7 @@ public class PlaytimeTracker
 	private void post(final Bucket bucket, final long accountHash, final int seconds)
 	{
 		final HttpUrl base = HttpUrl.parse(config.playtimeBackendUrl().trim());
-		if (base == null)
+		if (base == null || !isSecure(base))
 		{
 			onSendResult(false, bucket, seconds);
 			return;
@@ -266,6 +270,20 @@ public class PlaytimeTracker
 		}
 		flushing = null;
 		inFlight = false;
+	}
+
+	static boolean isSecure(final HttpUrl url)
+	{
+		if (url == null)
+		{
+			return false;
+		}
+		if (url.isHttps())
+		{
+			return true;
+		}
+		final String host = url.host();
+		return "localhost".equalsIgnoreCase(host) || "127.0.0.1".equals(host) || "::1".equals(host);
 	}
 
 	private boolean clanMatchesFilter(final String clan)
