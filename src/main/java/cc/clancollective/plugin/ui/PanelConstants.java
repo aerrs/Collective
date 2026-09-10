@@ -53,7 +53,7 @@ public final class PanelConstants
 	public static final String SECTION_CLAN = "Clan";
 	public static final String SECTION_ROSTER = "Roster";
 	public static final String SECTION_CLAN_STATS = "Clan stats";
-	public static final String SECTION_PLAYTIME = "Playtime";
+	public static final String SECTION_DISCOVER = "Discover clans";
 
 	public static final String ROSTER_EMPTY = "Roster loads once your clan settings are open.";
 	public static final String ROSTER_FILTER_ALL = "All ranks";
@@ -62,11 +62,13 @@ public final class PanelConstants
 
 	public static final int PILL_RADIUS = 8;
 
-	public static final String PLAYTIME_LOADING = "Loading playtime leaderboard…";
-	public static final String PLAYTIME_EMPTY =
-		"No playtime recorded yet. It appears once members with the plugin log in.";
-	public static final String PLAYTIME_SUBHEADER = "Top players · last 7 days";
-	public static final int PLAYTIME_MAX_HEIGHT = 240;
+	public static final String DISCOVER_LOADING = "Loading clans from Clan Collective…";
+	public static final String DISCOVER_EMPTY = "No clans found. Try a different search.";
+	public static final String DISCOVER_SEARCH_HINT = "Search clans…";
+	public static final String DISCOVER_OPEN = "View";
+	public static final String DISCOVER_COPY = "Copy CC";
+	public static final int DISCOVER_MAX_HEIGHT = 320;
+	public static final String CLANS_URL = "https://clancollective.cc/clans/";
 	public static final String SECTION_FEEDS = "Feed health";
 	public static final String SECTION_EVENTS = "Events";
 	public static final String SECTION_SETUP = "Setup";
@@ -102,8 +104,8 @@ public final class PanelConstants
 
 	public static final String SETUP_PLACEHOLDER =
 		"Roster, member counts and your rank show automatically once you're in a clan.<br><br>"
-			+ "In the plugin settings you can turn on <b>Clan stats</b> and the <b>Playtime leaderboard</b> "
-			+ "(playtime needs a token from your clan's dashboard at clancollective.cc).<br><br>"
+			+ "Turn on <b>Clan stats</b> in the settings, and use <b>Discover clans</b> to search the "
+			+ "Clan Collective directory from here.<br><br>"
 			+ "Add Discord webhook URLs for the <b>Clan chat</b> and <b>Clan admin</b> feeds to relay them, "
 			+ "then use <b>Events</b> to log attendance.";
 

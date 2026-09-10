@@ -1,14 +1,13 @@
 package cc.clancollective.plugin;
 
 import cc.clancollective.plugin.chat.ChatRelayNotifier;
+import cc.clancollective.plugin.clan.ClanDirectoryService;
 import cc.clancollective.plugin.clan.ClanInfoService;
 import cc.clancollective.plugin.clan.ClanRankTracker;
 import cc.clancollective.plugin.clan.ClanSnapshot;
 import cc.clancollective.plugin.clan.CollectiveStatsService;
 import cc.clancollective.plugin.events.EventRecorder;
 import cc.clancollective.plugin.net.WebhookClient;
-import cc.clancollective.plugin.playtime.PlaytimeService;
-import cc.clancollective.plugin.playtime.PlaytimeTracker;
 import cc.clancollective.plugin.ui.CollectivePanel;
 import cc.clancollective.plugin.ui.PanelConstants;
 import com.google.inject.Provides;
@@ -38,7 +37,7 @@ import net.runelite.client.util.Text;
 @PluginDescriptor(
 	name = "Collective",
 	description = "Clan tools and Discord integration for OSRS clans",
-	tags = {"clan", "discord", "webhook", "roster", "playtime"}
+	tags = {"clan", "clans", "discord", "webhook", "roster", "directory", "recruitment"}
 )
 public class CollectivePlugin extends Plugin
 {
@@ -70,10 +69,7 @@ public class CollectivePlugin extends Plugin
 	private CollectiveStatsService collectiveStatsService;
 
 	@Inject
-	private PlaytimeTracker playtimeTracker;
-
-	@Inject
-	private PlaytimeService playtimeService;
+	private ClanDirectoryService clanDirectoryService;
 
 	private static final int CLAN_REFRESH_TICKS = 10;
 
@@ -85,7 +81,7 @@ public class CollectivePlugin extends Plugin
 	@Override
 	protected void startUp() throws Exception
 	{
-		panel = new CollectivePanel(config, configManager, webhookClient, eventRecorder);
+		panel = new CollectivePanel(config, configManager, webhookClient, eventRecorder, clanDirectoryService);
 
 		final NavigationButton.NavigationButtonBuilder builder = NavigationButton.builder()
 			.tooltip(PanelConstants.NAV_TOOLTIP)
@@ -109,7 +105,6 @@ public class CollectivePlugin extends Plugin
 	protected void shutDown() throws Exception
 	{
 		webhookClient.cancelPendingRetries();
-		playtimeTracker.shutDown();
 
 		if (panel != null)
 		{
@@ -141,7 +136,6 @@ public class CollectivePlugin extends Plugin
 	public void onGameTick(final GameTick event)
 	{
 		clanRankTracker.onGameTick();
-		playtimeTracker.onGameTick();
 
 		if (--ticksUntilClanRefresh <= 0)
 		{
@@ -194,15 +188,6 @@ public class CollectivePlugin extends Plugin
 	public void onGameStateChanged(final GameStateChanged event)
 	{
 		final GameState state = event.getGameState();
-		if (state == GameState.LOGGED_IN)
-		{
-			playtimeTracker.onLogin();
-		}
-		if (state == GameState.LOGIN_SCREEN || state == GameState.HOPPING
-			|| state == GameState.CONNECTION_LOST)
-		{
-			playtimeTracker.onLogout();
-		}
 		if (state == GameState.LOGIN_SCREEN || state == GameState.HOPPING)
 		{
 			clanRankTracker.reset();
@@ -214,7 +199,6 @@ public class CollectivePlugin extends Plugin
 				current.setLocalRsn(null);
 				current.updateClan(ClanSnapshot.EMPTY);
 				current.setClanStatsVisible(false);
-				current.setPlaytimeVisible(false);
 			}
 		}
 	}
@@ -254,24 +238,6 @@ public class CollectivePlugin extends Plugin
 		else
 		{
 			current.setClanStatsVisible(false);
-		}
-
-		if (config.playtimeEnabled() && snapshot.isInClan())
-		{
-			current.setPlaytimeVisible(true);
-			playtimeService.request(snapshot.getClanName(), config.clanCollectiveSlug(),
-				entries ->
-				{
-					final CollectivePanel p = panel;
-					if (p != null)
-					{
-						p.updatePlaytime(entries);
-					}
-				});
-		}
-		else
-		{
-			current.setPlaytimeVisible(false);
 		}
 	}
 
