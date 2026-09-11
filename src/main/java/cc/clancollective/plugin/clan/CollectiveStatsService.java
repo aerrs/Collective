@@ -17,12 +17,6 @@ import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
 
-/**
- * Fetches clan stats (EHP/EHB/XP/members) from Clan Collective's read-only API.
- * Results are cached per lookup key and refreshed at most every {@link #REFRESH_MS};
- * failures back off for {@link #ERROR_RETRY_MS}. Network runs on the OkHttp pool;
- * the callback is invoked off the client/EDT thread, so callers must marshal to Swing.
- */
 @Slf4j
 @Singleton
 public class CollectiveStatsService
@@ -51,11 +45,6 @@ public class CollectiveStatsService
 			.build();
 	}
 
-	/**
-	 * Requests stats for the given clan. Prefers {@code slug} when non-blank, else looks
-	 * up by in-game {@code clanName}. Serves cached data immediately when available and
-	 * fetches in the background when stale.
-	 */
 	public void request(final String clanName, final String slug, final Consumer<ClanStats> callback)
 	{
 		final String slugTrim = slug == null ? "" : slug.trim();
@@ -173,7 +162,6 @@ public class CollectiveStatsService
 				final long backoff = result.getState() == ClanStats.State.ERROR
 					? ERROR_RETRY_MS : REFRESH_MS;
 				nextAllowedMs = System.currentTimeMillis() + backoff;
-				// Keep serving the last good result on transient errors.
 				if (result.getState() != ClanStats.State.ERROR || cached == null)
 				{
 					cached = result;

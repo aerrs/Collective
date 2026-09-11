@@ -5,19 +5,17 @@ public final class ClanDirectoryEntry
 	private final String name;
 	private final String slug;
 	private final String blurb;
-	private final String type;
 	private final String region;
 	private final String recruitment;
 	private final int members;
 	private final String cc;
 
-	public ClanDirectoryEntry(final String name, final String slug, final String blurb, final String type,
+	public ClanDirectoryEntry(final String name, final String slug, final String blurb,
 		final String region, final String recruitment, final int members, final String cc)
 	{
 		this.name = name;
 		this.slug = slug;
 		this.blurb = blurb;
-		this.type = type;
 		this.region = region;
 		this.recruitment = recruitment;
 		this.members = members;
@@ -37,11 +35,6 @@ public final class ClanDirectoryEntry
 	public String getBlurb()
 	{
 		return blurb;
-	}
-
-	public String getType()
-	{
-		return type;
 	}
 
 	public String getRegion()

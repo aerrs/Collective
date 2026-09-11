@@ -3,20 +3,12 @@ package cc.clancollective.plugin.clan;
 import java.util.Collections;
 import java.util.List;
 
-/**
- * Immutable clan stats fetched from Clan Collective (which sources them from
- * Wise Old Man / TempleOSRS). Numeric fields may be null when the clan is
- * listed but has no synced tracker data yet.
- */
 public final class ClanStats
 {
 	public enum State
 	{
-		/** Stats were returned (fields may still be null if not yet synced). */
 		OK,
-		/** The clan is not listed on Clan Collective. */
 		NOT_FOUND,
-		/** The request failed (network, server, or parse error). */
 		ERROR
 	}
 
@@ -112,7 +104,6 @@ public final class ClanStats
 		return ehp != null || ehb != null || totalXp != null;
 	}
 
-	/** Weekly efficiency gains for the clan: totals plus top contributors. */
 	public static final class Weekly
 	{
 		private final Double ehpGained;
@@ -155,7 +146,6 @@ public final class ClanStats
 		}
 	}
 
-	/** A single member's contribution to a weekly gains leaderboard. */
 	public static final class Contributor
 	{
 		private final String rsn;

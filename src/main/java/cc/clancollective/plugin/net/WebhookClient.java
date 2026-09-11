@@ -1,14 +1,12 @@
 package cc.clancollective.plugin.net;
 
 import cc.clancollective.plugin.CollectiveConfig;
-import cc.clancollective.plugin.util.Screenshot;
 import com.google.gson.Gson;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
@@ -24,7 +22,6 @@ import okhttp3.Callback;
 import okhttp3.HttpUrl;
 import okhttp3.Interceptor;
 import okhttp3.MediaType;
-import okhttp3.MultipartBody;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
@@ -49,8 +46,6 @@ public class WebhookClient
 	private final ScheduledExecutorService executor;
 	private final Gson gson;
 
-	private final Map<String, WebhookHealth> health = new ConcurrentHashMap<>();
-	private final List<Runnable> healthListeners = new ArrayList<>();
 	private final Set<ScheduledFuture<?>> pendingRetries = ConcurrentHashMap.newKeySet();
 	private final AtomicInteger inFlight = new AtomicInteger();
 	private volatile boolean shuttingDown;
@@ -76,25 +71,14 @@ public class WebhookClient
 			.build();
 
 		final int timeout = config.networkTimeout();
-		Interceptor.Chain updated = chain
+		final Interceptor.Chain updated = chain
 			.withConnectTimeout(timeout, TimeUnit.SECONDS)
 			.withReadTimeout(timeout, TimeUnit.SECONDS);
-
-		if (request.body() instanceof MultipartBody)
-		{
-			updated = updated.withWriteTimeout(Math.max(timeout * 3, timeout), TimeUnit.SECONDS);
-		}
 
 		return updated.proceed(request);
 	}
 
 	public void send(final String webhookUrls, final WebhookPayload payload)
-	{
-		send(webhookUrls, payload, null);
-	}
-
-	public void send(final String webhookUrls, final WebhookPayload payload,
-		@Nullable final Screenshot screenshot)
 	{
 		final List<HttpUrl> urls = parseUrls(webhookUrls);
 		if (urls.isEmpty())
@@ -103,17 +87,6 @@ public class WebhookClient
 		}
 
 		final String json = payload.toJson(gson);
-		RequestBody imageBody = null;
-		String imageName = null;
-		if (screenshot != null)
-		{
-			final MediaType type = MediaType.parse(screenshot.getMimeType());
-			imageBody = RequestBody.create(type, screenshot.getBytes());
-			imageName = screenshot.getFilename();
-		}
-		final RequestBody image = imageBody;
-		final String screenshotName = imageName;
-
 		for (final HttpUrl url : urls)
 		{
 			if (inFlight.getAndIncrement() >= MAX_IN_FLIGHT)
@@ -123,31 +96,15 @@ public class WebhookClient
 					MAX_IN_FLIGHT, censor(url));
 				continue;
 			}
-			markUnknownIfAbsent(url);
-			executor.execute(() -> dispatch(url, json, screenshotName, image, 0));
+			executor.execute(() -> dispatch(url, json, 0));
 		}
 	}
 
-	private void dispatch(final HttpUrl url, final String json, @Nullable final String screenshotName,
-		@Nullable final RequestBody image, final int attempt)
+	private void dispatch(final HttpUrl url, final String json, final int attempt)
 	{
-		final RequestBody body;
-		if (image != null && screenshotName != null)
-		{
-			body = new MultipartBody.Builder()
-				.setType(MultipartBody.FORM)
-				.addFormDataPart("payload_json", json)
-				.addFormDataPart("file", screenshotName, image)
-				.build();
-		}
-		else
-		{
-			body = RequestBody.create(JSON, json);
-		}
-
 		final Request request = new Request.Builder()
 			.url(url)
-			.post(body)
+			.post(RequestBody.create(JSON, json))
 			.build();
 
 		httpClient.newCall(request).enqueue(new Callback()
@@ -155,7 +112,7 @@ public class WebhookClient
 			@Override
 			public void onFailure(final Call call, final IOException e)
 			{
-				retryOrDrop(url, json, screenshotName, image, attempt, e.getMessage(), 0L, true);
+				retryOrDrop(url, json, attempt, e.getMessage(), 0L, true);
 			}
 
 			@Override
@@ -167,7 +124,6 @@ public class WebhookClient
 					if (r.isSuccessful())
 					{
 						inFlight.decrementAndGet();
-						updateHealth(url, health(url).withSuccess());
 						return;
 					}
 
@@ -187,16 +143,14 @@ public class WebhookClient
 						retryable = false;
 					}
 
-					retryOrDrop(url, json, screenshotName, image, attempt,
-						"HTTP " + code + reason(r), retryAfterMs, retryable);
+					retryOrDrop(url, json, attempt, "HTTP " + code + reason(r), retryAfterMs, retryable);
 				}
 			}
 		});
 	}
 
-	private void retryOrDrop(final HttpUrl url, final String json, @Nullable final String screenshotName,
-		@Nullable final RequestBody image, final int attempt, final String error, final long retryAfterMs,
-		final boolean retryable)
+	private void retryOrDrop(final HttpUrl url, final String json, final int attempt,
+		final String error, final long retryAfterMs, final boolean retryable)
 	{
 		final int maxRetries = config.maxRetries();
 		final long baseDelay = config.baseRetryDelay();
@@ -206,16 +160,14 @@ public class WebhookClient
 			final long backoff = baseDelay * (1L << Math.min(attempt, MAX_BACKOFF_SHIFT));
 			final long delay = Math.max(retryAfterMs, backoff);
 
-			updateHealth(url, health(url).withWarning(error));
 			log.debug("Collective: webhook delivery to {} failed ({}), retrying in {}ms (attempt {}/{})",
 				censor(url), error, delay, attempt + 1, maxRetries);
 
-			scheduleRetry(url, json, screenshotName, image, attempt, delay);
+			scheduleRetry(url, json, attempt, delay);
 		}
 		else
 		{
 			inFlight.decrementAndGet();
-			updateHealth(url, health(url).withError(error));
 			if (!retryable)
 			{
 				log.warn("Collective: webhook delivery to {} dropped ({}); error is not retryable",
@@ -229,8 +181,7 @@ public class WebhookClient
 		}
 	}
 
-	private void scheduleRetry(final HttpUrl url, final String json, @Nullable final String screenshotName,
-		@Nullable final RequestBody image, final int attempt, final long delay)
+	private void scheduleRetry(final HttpUrl url, final String json, final int attempt, final long delay)
 	{
 		if (shuttingDown)
 		{
@@ -242,7 +193,7 @@ public class WebhookClient
 		final ScheduledFuture<?> future = executor.schedule(() ->
 		{
 			pendingRetries.remove(holder[0]);
-			dispatch(url, json, screenshotName, image, attempt + 1);
+			dispatch(url, json, attempt + 1);
 		}, delay, TimeUnit.MILLISECONDS);
 
 		holder[0] = future;
@@ -305,59 +256,6 @@ public class WebhookClient
 			}
 		}
 		return 0L;
-	}
-
-	public WebhookHealth healthFor(final String urlString)
-	{
-		final HttpUrl url = HttpUrl.parse(urlString == null ? "" : urlString.trim());
-		return url == null ? WebhookHealth.unknown() : health(url);
-	}
-
-	public void addHealthListener(final Runnable listener)
-	{
-		synchronized (healthListeners)
-		{
-			healthListeners.add(listener);
-		}
-	}
-
-	public void removeHealthListener(final Runnable listener)
-	{
-		synchronized (healthListeners)
-		{
-			healthListeners.remove(listener);
-		}
-	}
-
-	private WebhookHealth health(final HttpUrl url)
-	{
-		return health.getOrDefault(url.toString(), WebhookHealth.unknown());
-	}
-
-	private void markUnknownIfAbsent(final HttpUrl url)
-	{
-		health.putIfAbsent(url.toString(), WebhookHealth.unknown());
-	}
-
-	private void updateHealth(final HttpUrl url, final WebhookHealth next)
-	{
-		health.put(url.toString(), next);
-		final List<Runnable> snapshot;
-		synchronized (healthListeners)
-		{
-			snapshot = new ArrayList<>(healthListeners);
-		}
-		for (final Runnable r : snapshot)
-		{
-			try
-			{
-				r.run();
-			}
-			catch (Exception e)
-			{
-				log.debug("Collective: health listener threw", e);
-			}
-		}
 	}
 
 	static List<HttpUrl> parseUrls(final String raw)
@@ -430,7 +328,7 @@ public class WebhookClient
 		if (segments.size() >= 2)
 		{
 			return url.scheme() + "://" + url.host() + "/.../"
-				+ segments.get(segments.size() - 2) + "/\u2022\u2022\u2022";
+				+ segments.get(segments.size() - 2) + "/***";
 		}
 		return url.host();
 	}
@@ -440,7 +338,7 @@ public class WebhookClient
 		final int slash = raw.lastIndexOf('/');
 		if (slash > 0 && slash < raw.length() - 1)
 		{
-			return raw.substring(0, slash + 1) + "\u2022\u2022\u2022";
+			return raw.substring(0, slash + 1) + "***";
 		}
 		return raw;
 	}

@@ -137,7 +137,7 @@ public class ClanDirectoryService
 			{
 				if (c != null && c.name != null && c.slug != null)
 				{
-					out.add(new ClanDirectoryEntry(c.name, c.slug, c.blurb, c.type,
+					out.add(new ClanDirectoryEntry(c.name, c.slug, c.blurb,
 						c.region, c.recruitment, Math.max(0, c.members), c.cc));
 				}
 			}
@@ -184,7 +184,6 @@ public class ClanDirectoryService
 		String name;
 		String slug;
 		String blurb;
-		String type;
 		String region;
 		String recruitment;
 		int members;

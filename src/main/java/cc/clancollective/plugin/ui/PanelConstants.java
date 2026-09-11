@@ -13,8 +13,6 @@ public final class PanelConstants
 
 	public static final Color ACCENT_HOVER = new Color(0x50, 0x60, 0xE0);
 
-	public static final Color ACCENT_MUTED = new Color(0x40, 0x4D, 0xA9);
-
 	public static final Color BG = new Color(0x05, 0x04, 0x03);
 
 	public static final Color SURFACE = new Color(0x14, 0x14, 0x16);
@@ -25,7 +23,6 @@ public final class PanelConstants
 
 	public static final Color TEXT_DIM = ColorScheme.LIGHT_GRAY_COLOR;
 
-	public static final int PANEL_PADDING = 10;
 	public static final int HEADER_PADDING_Y = 8;
 	public static final int HEADER_PADDING_X = 10;
 	public static final int SECTION_GAP = 10;
@@ -49,7 +46,6 @@ public final class PanelConstants
 	public static final String SECTION_CLAN_STATS = "Clan stats";
 	public static final String SECTION_DISCOVER = "Discover clans";
 
-	public static final String ROSTER_EMPTY = "Roster loads once your clan settings are open.";
 	public static final String ROSTER_FILTER_ALL = "All ranks";
 	public static final int ROSTER_MAX_HEIGHT = 240;
 	public static final int ROSTER_ICON_SIZE = 16;
@@ -75,17 +71,12 @@ public final class PanelConstants
 	public static final String STATS_EHP = "EHP";
 	public static final String STATS_EHB = "EHB";
 	public static final String STATS_TOTAL_XP = "Total XP";
-	public static final String STATS_MEMBERS = "Members";
 	public static final String STATS_WEEKLY_HEADER = "THIS WEEK";
-	public static final String STATS_EHP_GAINED = "EHP gained";
-	public static final String STATS_EHB_GAINED = "EHB gained";
 
 	public static final String CLAN_NONE_TITLE = "Not in a clan";
 	public static final String CLAN_NONE_HINT =
 		"Join a clan in-game to see who's online, your rank, and member counts here.";
 	public static final String CLAN_YOU_PREFIX = "You: ";
-	public static final int CLAN_MEMBERS_MAX = 40;
-	public static final String CLAN_WORLD_PREFIX = "W";
 
 	public static final String EVENT_START = "Start";
 	public static final String EVENT_STOP = "Stop";
