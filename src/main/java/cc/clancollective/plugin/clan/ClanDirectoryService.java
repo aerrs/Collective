@@ -32,6 +32,7 @@ public class ClanDirectoryService
 
 	private final Object lock = new Object();
 	private String key;
+	private String queryText = "";
 	private List<ClanDirectoryEntry> cached;
 	private long nextAllowedMs;
 	private boolean inFlight;
@@ -58,6 +59,7 @@ public class ClanDirectoryService
 			if (!lookup.equals(key))
 			{
 				key = lookup;
+				queryText = q;
 				cached = null;
 				nextAllowedMs = 0L;
 			}
@@ -154,22 +156,46 @@ public class ClanDirectoryService
 		final Consumer<List<ClanDirectoryEntry>> callback)
 	{
 		final boolean report;
+		final String refetchLookup;
+		final String refetchQuery;
 		synchronized (lock)
 		{
 			inFlight = false;
+			final long now = System.currentTimeMillis();
 			if (lookup.equals(key))
 			{
-				nextAllowedMs = System.currentTimeMillis() + (result == null ? ERROR_RETRY_MS : REFRESH_MS);
+				nextAllowedMs = now + (result == null ? ERROR_RETRY_MS : REFRESH_MS);
 				if (result != null)
 				{
 					cached = result;
 				}
+				report = result != null || cached == null;
+				refetchLookup = null;
+				refetchQuery = null;
 			}
-			report = result != null || cached == null;
+			else
+			{
+				report = false;
+				if (now >= nextAllowedMs)
+				{
+					inFlight = true;
+					refetchLookup = key;
+					refetchQuery = queryText;
+				}
+				else
+				{
+					refetchLookup = null;
+					refetchQuery = null;
+				}
+			}
 		}
 		if (report)
 		{
 			callback.accept(result);
+		}
+		if (refetchLookup != null)
+		{
+			fetch(refetchLookup, refetchQuery, callback);
 		}
 	}
 

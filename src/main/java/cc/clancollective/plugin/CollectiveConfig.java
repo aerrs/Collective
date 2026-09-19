@@ -41,6 +41,13 @@ public interface CollectiveConfig extends Config
 	)
 	String SECTION_CLAN_STATS = "clanStats";
 
+	@ConfigSection(
+		name = "Clan directory",
+		description = "Browse clans recruiting on Clan Collective from the side panel.",
+		position = 8
+	)
+	String SECTION_CLAN_DIRECTORY = "clanDirectory";
+
 	@Range(min = 1, max = 60)
 	@ConfigItem(
 		keyName = "networkTimeout",
@@ -223,6 +230,21 @@ public interface CollectiveConfig extends Config
 		position = 0
 	)
 	default boolean showClanStats()
+	{
+		return false;
+	}
+
+	@ConfigItem(
+		keyName = "showDirectory",
+		name = "Browse clan directory",
+		description = "Load the list of clans recruiting on Clan Collective (clancollective.cc) in the "
+			+ "side panel's Discover section when you're not in a clan. Left off, the plugin makes no "
+			+ "directory requests.",
+		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
+		section = SECTION_CLAN_DIRECTORY,
+		position = 0
+	)
+	default boolean showDirectory()
 	{
 		return false;
 	}

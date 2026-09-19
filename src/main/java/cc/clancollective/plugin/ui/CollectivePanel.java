@@ -899,6 +899,12 @@ public class CollectivePanel extends PluginPanel
 		{
 			return;
 		}
+		if (!config.showDirectory())
+		{
+			discoverRendered = false;
+			renderDiscoverMessage(PanelConstants.DISCOVER_DISABLED);
+			return;
+		}
 		if (!discoverRendered)
 		{
 			renderDiscoverMessage(PanelConstants.DISCOVER_LOADING);

@@ -1,6 +1,7 @@
 package cc.clancollective.plugin.clan;
 
 import com.google.gson.Gson;
+import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import okhttp3.Call;
@@ -110,5 +111,45 @@ public class ClanDirectoryServiceTest
 		service.request("a", e -> { });
 		service.request("b", e -> { });
 		verify(httpClient, times(2)).newCall(any());
+	}
+
+	private void respondTo(final Callback cb, final int code, final String body) throws IOException
+	{
+		final Request req = new Request.Builder().url("https://clancollective.cc/x").build();
+		final Response resp = new Response.Builder()
+			.request(req).protocol(Protocol.HTTP_1_1).code(code).message("m")
+			.body(ResponseBody.create(MediaType.parse("application/json"), body))
+			.build();
+		cb.onResponse(call, resp);
+	}
+
+	@Test
+	public void supersedingQueryDropsStaleResultAndRefetches() throws IOException
+	{
+		final List<Callback> callbacks = new java.util.ArrayList<>();
+		doAnswer(inv ->
+		{
+			callbacks.add(inv.getArgument(0));
+			return null;
+		}).when(call).enqueue(any());
+
+		final AtomicReference<List<ClanDirectoryEntry>> got = new AtomicReference<>();
+		service.request("a", got::set);
+		service.request("b", got::set);
+
+		verify(httpClient, times(1)).newCall(any());
+
+		respondTo(callbacks.get(0), 200,
+			"{\"ok\":true,\"clans\":[{\"name\":\"Alpha\",\"slug\":\"alpha\",\"members\":1}]}");
+
+		assertNull(got.get());
+		verify(httpClient, times(2)).newCall(any());
+
+		respondTo(callbacks.get(1), 200,
+			"{\"ok\":true,\"clans\":[{\"name\":\"Beta\",\"slug\":\"beta\",\"members\":2}]}");
+
+		assertNotNull(got.get());
+		assertEquals(1, got.get().size());
+		assertEquals("Beta", got.get().get(0).getName());
 	}
 }

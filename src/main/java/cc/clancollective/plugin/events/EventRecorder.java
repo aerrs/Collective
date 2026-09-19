@@ -19,7 +19,7 @@ public class EventRecorder
 	private Instant startedAt;
 	private Instant stoppedAt;
 
-	public void start()
+	public synchronized void start()
 	{
 		firstSeen.clear();
 		stoppedAt = null;
@@ -28,7 +28,7 @@ public class EventRecorder
 		needsSeed = true;
 	}
 
-	public void stop()
+	public synchronized void stop()
 	{
 		if (recording)
 		{
@@ -38,7 +38,7 @@ public class EventRecorder
 		}
 	}
 
-	public void reset()
+	public synchronized void reset()
 	{
 		firstSeen.clear();
 		recording = false;
@@ -47,7 +47,7 @@ public class EventRecorder
 		stoppedAt = null;
 	}
 
-	public boolean seedIfNeeded(final Client client)
+	public synchronized boolean seedIfNeeded(final Client client)
 	{
 		if (!recording || !needsSeed || client == null)
 		{
@@ -80,7 +80,7 @@ public class EventRecorder
 		return firstSeen.size() != before;
 	}
 
-	public boolean onPlayerSpawned(final Player player, final ClanChannel channel)
+	public synchronized boolean onPlayerSpawned(final Player player, final ClanChannel channel)
 	{
 		if (!recording || player == null || channel == null)
 		{
@@ -107,17 +107,17 @@ public class EventRecorder
 		return true;
 	}
 
-	public boolean isRecording()
+	public synchronized boolean isRecording()
 	{
 		return recording;
 	}
 
-	public int count()
+	public synchronized int count()
 	{
 		return firstSeen.size();
 	}
 
-	public Duration elapsed()
+	public synchronized Duration elapsed()
 	{
 		if (startedAt == null)
 		{
@@ -135,12 +135,12 @@ public class EventRecorder
 		return stoppedAt != null ? stoppedAt : startedAt;
 	}
 
-	public List<String> names()
+	public synchronized List<String> names()
 	{
 		return Collections.unmodifiableList(new ArrayList<>(firstSeen.keySet()));
 	}
 
-	public List<String> lines()
+	public synchronized List<String> lines()
 	{
 		final Instant end = endReference();
 		final List<String> out = new ArrayList<>();
