@@ -14,6 +14,7 @@ import org.junit.Before;
 import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.RETURNS_SELF;
 import static org.mockito.Mockito.doAnswer;
@@ -111,5 +112,31 @@ public class CollectiveStatsServiceTest
 		service.request("Clan", "", s -> { });
 		service.request("Clan", "", s -> { });
 		verify(client, times(1)).newCall(any());
+	}
+
+	@Test
+	public void staleResponseAfterClanSwitchIsDropped() throws Exception
+	{
+		final AtomicReference<Callback> captured = new AtomicReference<>();
+		doAnswer(inv ->
+		{
+			captured.set(inv.getArgument(0));
+			return null;
+		}).when(call).enqueue(any());
+
+		final AtomicReference<ClanStats> gotA = new AtomicReference<>();
+		service.request("ClanA", "", gotA::set);
+		assertNotNull(captured.get());
+
+		service.request("ClanB", "", s -> { });
+
+		final Request req = new Request.Builder().url("https://clancollective.cc/x").build();
+		final Response resp = new Response.Builder()
+			.request(req).protocol(Protocol.HTTP_1_1).code(200).message("m")
+			.body(ResponseBody.create(MediaType.parse("application/json"), "{\"ok\":true,\"ehp\":1}"))
+			.build();
+		captured.get().onResponse(call, resp);
+
+		assertNull(gotA.get());
 	}
 }

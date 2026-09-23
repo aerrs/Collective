@@ -154,10 +154,12 @@ public class CollectiveStatsService
 
 	private void finish(final String lookup, final ClanStats result, final Consumer<ClanStats> callback)
 	{
+		final boolean current;
 		synchronized (lock)
 		{
 			inFlight = false;
-			if (lookup.equals(key))
+			current = lookup.equals(key);
+			if (current)
 			{
 				final long backoff = result.getState() == ClanStats.State.ERROR
 					? ERROR_RETRY_MS : REFRESH_MS;
@@ -168,7 +170,10 @@ public class CollectiveStatsService
 				}
 			}
 		}
-		callback.accept(result);
+		if (current)
+		{
+			callback.accept(result);
+		}
 	}
 
 	private static ClanStats.Weekly toWeekly(final WeeklyDto dto)

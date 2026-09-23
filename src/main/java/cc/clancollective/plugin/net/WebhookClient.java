@@ -205,6 +205,11 @@ public class WebhookClient
 		}
 	}
 
+	public void resume()
+	{
+		shuttingDown = false;
+	}
+
 	public void cancelPendingRetries()
 	{
 		shuttingDown = true;

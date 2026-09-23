@@ -80,6 +80,8 @@ public class CollectivePlugin extends Plugin
 	@Override
 	protected void startUp() throws Exception
 	{
+		webhookClient.resume();
+
 		panel = new CollectivePanel(config, configManager, eventRecorder, clanDirectoryService);
 
 		final NavigationButton.NavigationButtonBuilder builder = NavigationButton.builder()
