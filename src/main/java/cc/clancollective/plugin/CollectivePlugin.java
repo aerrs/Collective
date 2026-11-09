@@ -39,7 +39,7 @@ import net.runelite.client.util.Text;
 
 @PluginDescriptor(
 	name = "Collective",
-	description = "Tick your clan's Clan Collective bingo tiles automatically and follow your team's board",
+	description = "Manage your clan's bingo event with Clan Collective",
 	tags = {"clan", "bingo", "event", "competition"}
 )
 public class CollectivePlugin extends Plugin
