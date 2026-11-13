@@ -18,6 +18,9 @@ public class CollectiveApiTest
 		assertNull(CollectiveApi.image("https://evil.example/static/img/x.png"));
 		assertNull(CollectiveApi.image("/api/bingo/watch"));
 		assertNull(CollectiveApi.image("/static/img/../../api/x"));
+		assertEquals("https://clancollective.cc/img/128/logos/1-abc.webp.png",
+			CollectiveApi.image("/img/128/logos/1-abc.webp.png").toString());
+		assertNull(CollectiveApi.image("/img/128/logos/1-abc.webp"));
 	}
 
 	@Test

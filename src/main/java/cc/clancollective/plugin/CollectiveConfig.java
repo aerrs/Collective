@@ -8,6 +8,7 @@ import net.runelite.client.config.ConfigItem;
 public interface CollectiveConfig extends Config
 {
 	String GROUP = "clancollective";
+	String CLANS = "clans";
 	String WARNING = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers";
 
 	@ConfigItem(
@@ -33,6 +34,19 @@ public interface CollectiveConfig extends Config
 		position = 1
 	)
 	default boolean bingoScreenshots()
+	{
+		return false;
+	}
+
+	@ConfigItem(
+		keyName = CLANS,
+		name = "Clan listings",
+		description = "Show your clan's Clan Collective (clancollective.cc) listing in the side panel, "
+			+ "or clans to browse when you are not in one. Sends your clan name.",
+		warning = WARNING,
+		position = 2
+	)
+	default boolean clans()
 	{
 		return false;
 	}

@@ -19,6 +19,7 @@ public final class CollectiveApi
 {
 	public static final HttpUrl BASE_URL = HttpUrl.get("https://clancollective.cc");
 	private static final String IMAGES = "/static/img/";
+	private static final String THUMBS = "/img/";
 
 	private CollectiveApi()
 	{
@@ -36,7 +37,7 @@ public final class CollectiveApi
 
 	public static HttpUrl image(final String path)
 	{
-		if (path == null || !path.startsWith(IMAGES) || path.contains(".."))
+		if (path == null || !(path.startsWith(IMAGES) || path.startsWith(THUMBS) && path.endsWith(".png")) || path.contains(".."))
 		{
 			return null;
 		}
@@ -89,6 +90,12 @@ public final class CollectiveApi
 	public static <T> void send(final OkHttpClient client, final Gson gson, final Request request, final Class<T> type,
 		final Consumer<T> done)
 	{
+		send(client, gson, request, type, false, done);
+	}
+
+	public static <T> void send(final OkHttpClient client, final Gson gson, final Request request, final Class<T> type,
+		final boolean readNotFound, final Consumer<T> done)
+	{
 		client.newCall(request).enqueue(new Callback()
 		{
 			@Override
@@ -104,7 +111,7 @@ public final class CollectiveApi
 				T body = null;
 				try (Response r = response)
 				{
-					if (r.isSuccessful() && r.body() != null)
+					if ((r.isSuccessful() || readNotFound && r.code() == 404) && r.body() != null)
 					{
 						body = gson.fromJson(r.body().charStream(), type);
 					}

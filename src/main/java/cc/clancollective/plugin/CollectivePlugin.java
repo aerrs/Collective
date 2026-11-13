@@ -3,7 +3,9 @@ package cc.clancollective.plugin;
 import cc.clancollective.plugin.bingo.BingoCapture;
 import cc.clancollective.plugin.bingo.BingoChat;
 import cc.clancollective.plugin.bingo.BingoService;
+import cc.clancollective.plugin.clan.ClanService;
 import cc.clancollective.plugin.ui.BingoPanel;
+import cc.clancollective.plugin.ui.ClanPanel;
 import com.google.inject.Provides;
 import java.util.Collections;
 import java.util.EnumMap;
@@ -17,6 +19,7 @@ import net.runelite.api.Player;
 import net.runelite.api.Skill;
 import net.runelite.api.clan.ClanChannel;
 import net.runelite.api.events.ChatMessage;
+import net.runelite.api.events.ClanChannelChanged;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.StatChanged;
@@ -39,8 +42,8 @@ import net.runelite.client.util.Text;
 
 @PluginDescriptor(
 	name = "Collective",
-	description = "Manage your clan's bingo event with Clan Collective",
-	tags = {"clan", "bingo", "event", "competition"}
+	description = "Clan bingo and clan listings from Clan Collective",
+	tags = {"clan", "bingo", "event", "competition", "directory"}
 )
 public class CollectivePlugin extends Plugin
 {
@@ -66,11 +69,14 @@ public class CollectivePlugin extends Plugin
 	@Inject
 	private BingoService bingoService;
 	@Inject
+	private ClanService clanService;
+	@Inject
 	private BingoCapture capture;
 
 	private final Map<Skill, Integer> xp = new EnumMap<>(Skill.class);
 	private final Map<Skill, Integer> levels = new EnumMap<>(Skill.class);
 	private BingoPanel panel;
+	private ClanPanel clanPanel;
 	private NavigationButton navButton;
 	private int ticks;
 	private String kcName;
@@ -84,12 +90,14 @@ public class CollectivePlugin extends Plugin
 	@Override
 	protected void startUp()
 	{
-		panel = new BingoPanel(bingoService, itemManager, () -> bingoService.refreshIfOlderThan(60_000L));
+		clanPanel = new ClanPanel(clanService);
+		panel = new BingoPanel(bingoService, itemManager, clanPanel, () -> bingoService.refreshIfOlderThan(60_000L));
 		bingoService.onChange(this::redraw);
 		navButton = NavigationButton.builder().tooltip("Collective").priority(7).panel(panel)
 			.icon(ImageUtil.loadImageResource(BingoPanel.class, BingoPanel.ICON)).build();
 		clientToolbar.addNavigation(navButton);
 		redraw();
+		showClan();
 	}
 
 	@Override
@@ -101,6 +109,8 @@ public class CollectivePlugin extends Plugin
 		levels.clear();
 		bingoService.onChange(() -> { });
 		bingoService.reset();
+		clanPanel.stop();
+		clanPanel = null;
 		panel = null;
 		navButton = null;
 		ticks = 0;
@@ -123,6 +133,10 @@ public class CollectivePlugin extends Plugin
 		if (!CollectiveConfig.GROUP.equals(event.getGroup()))
 		{
 			return;
+		}
+		if (CollectiveConfig.CLANS.equals(event.getKey()))
+		{
+			showClan();
 		}
 		if (config.bingo())
 		{
@@ -174,6 +188,16 @@ public class CollectivePlugin extends Plugin
 			flushXp(true);
 			xp.clear();
 			levels.clear();
+			showClan();
+		}
+	}
+
+	@Subscribe
+	public void onClanChannelChanged(final ClanChannelChanged event)
+	{
+		if (!event.isGuest())
+		{
+			showClan();
 		}
 	}
 
@@ -281,6 +305,20 @@ public class CollectivePlugin extends Plugin
 		{
 			p.show(bingoService.board(), config.bingo());
 		}
+	}
+
+	private void showClan()
+	{
+		final BingoPanel p = panel;
+		if (p != null)
+		{
+			p.clan(loggedInClan(), config.clans());
+		}
+	}
+
+	private String loggedInClan()
+	{
+		return client.getGameState().getState() >= GameState.LOADING.getState() ? clanName() : null;
 	}
 
 	private void announce(final String message)

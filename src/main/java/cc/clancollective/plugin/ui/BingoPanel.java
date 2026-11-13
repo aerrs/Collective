@@ -47,16 +47,18 @@ public class BingoPanel extends PluginPanel
 	private final BingoService bingo;
 	private final ItemManager itemManager;
 	private final Runnable onOpen;
+	private final ClanPanel clans;
 	private final Map<String, Integer> ids = new HashMap<>();
 	private final JPanel body = Ui.column(Ui.BG, Ui.pad(Ui.PAD, Ui.PAD));
 	private BingoBoard shown;
 	private boolean enabled;
 	private int drawnWidth;
 
-	public BingoPanel(final BingoService bingo, final ItemManager itemManager, final Runnable onOpen)
+	public BingoPanel(final BingoService bingo, final ItemManager itemManager, final ClanPanel clans, final Runnable onOpen)
 	{
 		this.bingo = bingo;
 		this.itemManager = itemManager;
+		this.clans = clans;
 		this.onOpen = onOpen;
 		setBackground(Ui.BG);
 		setBorder(new EmptyBorder(0, 0, 0, 0));
@@ -79,7 +81,7 @@ public class BingoPanel extends PluginPanel
 		footer.add(link, BorderLayout.WEST);
 
 		final JPanel content = Ui.column(Ui.BG, null);
-		for (final JPanel part : new JPanel[]{header, body, footer})
+		for (final JPanel part : new JPanel[]{header, clans, body, footer})
 		{
 			part.setAlignmentX(Component.LEFT_ALIGNMENT);
 			content.add(part);
@@ -107,6 +109,15 @@ public class BingoPanel extends PluginPanel
 	public void show(final BingoBoard board, final boolean enabled)
 	{
 		SwingUtilities.invokeLater(() -> render(board, enabled));
+	}
+
+	public void clan(final String clan, final boolean listings)
+	{
+		SwingUtilities.invokeLater(() ->
+		{
+			body.setVisible(clan != null);
+			clans.show(clan, listings);
+		});
 	}
 
 	private int width()

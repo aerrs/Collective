@@ -36,10 +36,20 @@ final class Ui
 
 	static JLabel label(final String text, final Color fg)
 	{
-		final JLabel label = new JLabel(text);
+		final JLabel label = new JLabel();
+		label.putClientProperty("html.disable", Boolean.TRUE);
+		label.setText(text);
 		label.setFont(FontManager.getRunescapeSmallFont());
 		label.setForeground(fg);
 		label.setAlignmentX(Component.LEFT_ALIGNMENT);
+		return label;
+	}
+
+	static JLabel html(final String text, final Color fg)
+	{
+		final JLabel label = label("", fg);
+		label.putClientProperty("html.disable", null);
+		label.setText(text);
 		return label;
 	}
 
@@ -66,15 +76,9 @@ final class Ui
 	static void link(final JComponent c, final String url, final Color hover)
 	{
 		final Color normal = c.getForeground();
-		c.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+		click(c, () -> LinkBrowser.browse(url));
 		c.addMouseListener(new MouseAdapter()
 		{
-			@Override
-			public void mouseClicked(final MouseEvent e)
-			{
-				LinkBrowser.browse(url);
-			}
-
 			@Override
 			public void mouseEntered(final MouseEvent e)
 			{
@@ -85,6 +89,19 @@ final class Ui
 			public void mouseExited(final MouseEvent e)
 			{
 				c.setForeground(normal);
+			}
+		});
+	}
+
+	static void click(final JComponent c, final Runnable action)
+	{
+		c.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+		c.addMouseListener(new MouseAdapter()
+		{
+			@Override
+			public void mouseClicked(final MouseEvent e)
+			{
+				action.run();
 			}
 		});
 	}
